@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pg2mongo"
+version = "0.1.0"
+description = "Postgres to MongoDB transfer tool."
+authors = [{ name = "Your Name" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "click>=8.1",
+  "psycopg[binary]>=3.1",
+  "pymongo>=4.8",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.3",
+  "python-dotenv>=1.0",
+  "rich>=13.7",
+  "tomli>=2.0; python_version<'3.11'"
+]
+
+[project.scripts]
+pg2mongo = "pg2mongo.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]

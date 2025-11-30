@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+import click
+
+from pg2mongo.version import __version__
+from pg2mongo.transfer.customer import customer_cmd
+from pg2mongo.transfer.invoice import invoice_cmd
+from pg2mongo.transfer.pickup import pickup_cmd
+from pg2mongo.actions.init_indexes import init_indexes_cmd
+from pg2mongo.actions.test_connection import test_connection_cmd
+from pg2mongo.transfer.container import container_cmd
+
+
+
+@click.group(
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+@click.version_option(version=__version__, prog_name="pg2mongo")
+@click.option(
+    "-c",
+    "--config",
+    "config_path",
+    type=click.Path(exists=True, dir_okay=False),
+    help="Path to db.toml config file.",
+)
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose output.",
+)
+@click.pass_context
+def cli(ctx: click.Context, config_path: str | None, verbose: bool):
+    """
+    Postgres → MongoDB transfer toolkit.
+    """
+    ctx.ensure_object(dict)
+    ctx.obj["config_path"] = config_path
+    ctx.obj["verbose"] = verbose
+
+
+@cli.command("version")
+def version_cmd():
+    """Show pg2mongo version."""
+    click.secho(f"pg2mongo {__version__}", fg="cyan")
+
+
+@cli.group("transfer")
+@click.pass_context
+def transfer_group(ctx: click.Context):
+    """Transfer commands per entity (customer, invoice, pickup)."""
+    pass
+
+
+# Transfer subcommands
+transfer_group.add_command(customer_cmd, name="customer")
+transfer_group.add_command(invoice_cmd, name="invoice")
+transfer_group.add_command(pickup_cmd, name="pickup")
+transfer_group.add_command(container_cmd, name="container")
+
+
+# Admin / utility
+cli.add_command(init_indexes_cmd, name="init-indexes")
+cli.add_command(test_connection_cmd, name="test-connection")
+
+
+def main():
+    cli(prog_name="pg2mongo")
+
+
+if __name__ == "__main__":
+    main()

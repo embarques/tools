@@ -1,0 +1,44 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+dist/
+build/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.coverage*
+htmlcov/
+.cache/
+
+# --- Virtual envs ---
+.venv/
+venv/
+env/
+
+# --- Editors / OS ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- Local configs & secrets (DO NOT COMMIT) ---
+.env
+.env.*
+!*.example
+db.toml
+*.local.toml
+*.secrets.toml
+
+# If you ever add other per-env overrides, keep examples but ignore real files:
+# e.g., config.local.yaml, secrets.dev.json, etc.
+*.local.*
+*.secrets.*
+
+# --- Logs ---
+*.log
+logs/

@@ -1,0 +1,19 @@
+[postgres]
+server = "embserver.embarques.net"
+port = 5432
+db = "mydb"
+username = "myuser"
+password = "mypass"
+schema = "public"
+table = "invoices"
+
+[mongo]
+# Base URI (no credentials)
+uri = "mongodb://mongo1:27017,mongo2:27017,mongo3:27017/?replicaSet=rs0&connectTimeoutMS=10000&authSource=admin&authMechanism=SCRAM-SHA-256"
+db = "clientdb"
+collection = "invoices"
+username = "xxx"
+password = "xxx"
+
+[transfer]
+upsert_key = "oldID"
