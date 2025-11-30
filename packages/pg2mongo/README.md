@@ -320,7 +320,7 @@ pg2mongo -c db.toml transfer delivery --start-year 2023 --end-year 2024 --limit 
 ```
 
 
-## 🚚 13. Transfer branches
+## 🚚 14. Transfer branches
 
 ```bash
 # Sync all branches
