@@ -9,6 +9,13 @@ from pg2mongo.transfer.pickup import pickup_cmd
 from pg2mongo.actions.init_indexes import init_indexes_cmd
 from pg2mongo.actions.test_connection import test_connection_cmd
 from pg2mongo.transfer.container import container_cmd
+from pg2mongo.transfer.employee import employee_cmd
+from pg2mongo.transfer.user import user_cmd
+from pg2mongo.transfer.delivery import delivery_cmd
+from pg2mongo.transfer.branch import branch_cmd
+
+
+
 
 
 
@@ -57,6 +64,10 @@ transfer_group.add_command(customer_cmd, name="customer")
 transfer_group.add_command(invoice_cmd, name="invoice")
 transfer_group.add_command(pickup_cmd, name="pickup")
 transfer_group.add_command(container_cmd, name="container")
+transfer_group.add_command(employee_cmd, name="employee")
+transfer_group.add_command(user_cmd, name="user")
+transfer_group.add_command(delivery_cmd, name="delivery")
+transfer_group.add_command(branch_cmd, name="branch")
 
 
 # Admin / utility

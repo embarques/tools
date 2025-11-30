@@ -258,7 +258,7 @@ pg2mongo -c db.toml transfer pickup --start-date 2022-01-01 --limit 20 --dry-run
 pg2mongo -c db.toml transfer pickup
 ```
 
-## 🚚 9. Transfer Containers
+## 🚚 10. Transfer Containers
 
 ```bash
 # Backfill containers from 2022
@@ -271,6 +271,68 @@ pg2mongo -c db.toml transfer container --start-date 2022-01-01 --limit 20 --dry-
 pg2mongo -c db.toml transfer container
 ```
 
+## 🚚 11. Transfer employees
+
+```bash
+# Basic run, all employees
+pg2mongo -c db.toml transfer employee
+
+# Dry-run, just to verify mapping
+pg2mongo -c db.toml transfer employee --dry-run
+
+# Limit to first 50 employees
+pg2mongo -c db.toml transfer employee --limit 50
+
+# Limit + dry-run
+pg2mongo -c db.toml transfer employee --limit 50 --dry-run
+
+
+```
+
+## 🚚 12. Transfer users
+
+```bash
+# Sync all users
+pg2mongo -c db.toml transfer user
+
+# Dry-run (no writes, just preview)
+pg2mongo -c db.toml transfer user --dry-run
+
+# Limit to first 25 users (for testing)
+pg2mongo -c db.toml transfer user --limit 25
+
+# Limit + dry-run
+pg2mongo -c db.toml transfer user --limit 25 --dry-run
+
+```
+
+## 🚚 13. Transfer users
+```bash
+# All deliveries from 2022 to current year
+pg2mongo -c db.toml transfer delivery
+
+# Specific year range
+pg2mongo -c db.toml transfer delivery --start-year 2023 --end-year 2024
+
+# Dry-run with limit
+pg2mongo -c db.toml transfer delivery --start-year 2023 --end-year 2024 --limit 50 --dry-run
+
+```
+
+
+## 🚚 13. Transfer branches
+
+```bash
+# Sync all branches
+pg2mongo -c db.toml transfer branch
+
+# Dry-run preview
+pg2mongo -c db.toml transfer branch --dry-run
+
+# First 5 only, for testing
+pg2mongo -c db.toml transfer branch --limit 5 --dry-run
+
+```
 
 ---
 

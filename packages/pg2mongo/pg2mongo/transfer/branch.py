@@ -1,0 +1,135 @@
+from __future__ import annotations
+
+from typing import Optional
+
+import click
+from pymongo import UpdateOne
+
+from pg2mongo.builders.branch_build import build_branch_doc
+from pg2mongo.clients import connect_postgres, connect_mongo
+from pg2mongo.transfer.common import resolve_settings, close_connections_safe
+
+
+BRANCH_SQL = """
+SELECT
+    id,
+    name,
+    code,
+    b_type,
+    address1 AS "address.address1",
+    address2 AS "address.address2",
+    city     AS "address.city",
+    zipcode  AS "address.zipcode",
+    country  AS "address.country",
+    phone1,
+    phone2,
+    disclaimer,
+    branch."prefix"               AS prefix,
+    branch.logo                   AS logo,
+    branch.default_label_status   AS default_label_status
+FROM branch
+ORDER BY id
+"""
+
+
+@click.command("branch")
+@click.option(
+    "--limit",
+    type=int,
+    default=None,
+    help="Limit number of records processed (for testing).",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview actions without writing to Mongo.",
+)
+@click.pass_context
+def branch_cmd(
+    ctx: click.Context,
+    limit: Optional[int],
+    dry_run: bool,
+):
+    """
+    Transfer branch records from Postgres → MongoDB (branches collection).
+    """
+    config_path = ctx.obj.get("config_path")
+    verbose = bool(ctx.obj.get("verbose"))
+
+    settings = resolve_settings(config_path, verbose)
+
+    pg_conn = None
+    mongo_client = None
+
+    try:
+        # 1) Connect DBs
+        pg_conn = connect_postgres(settings, verbose=verbose)
+        mongo_client = connect_mongo(settings, verbose=verbose)
+
+        db = mongo_client[settings.mongo.db]
+        coll = db["branches"]
+
+        if verbose:
+            click.secho("[branches] Executing Postgres query…", fg="cyan")
+
+        # 2) Run query
+        with pg_conn.cursor() as cur:
+            cur.execute(BRANCH_SQL)
+            rows = cur.fetchall()
+
+        total_rows = len(rows)
+        if total_rows == 0:
+            click.secho("[branches] No records found in branch table.", fg="yellow")
+            return
+
+        if limit is not None:
+            rows = rows[:limit]
+
+        if verbose:
+            msg = f"[branches] Retrieved {len(rows)} rows from Postgres"
+            if limit is not None:
+                msg += f" (limit={limit})"
+            click.secho(msg, fg="cyan")
+
+        # 3) Build bulk upsert operations
+        ops: list[UpdateOne] = []
+        for idx, row in enumerate(rows, start=1):
+            doc = build_branch_doc(row)
+
+            if dry_run and verbose:
+                click.secho(
+                    f"[branches] DRY-RUN {idx}/{len(rows)} _id={doc['_id']} name={doc['name']}",
+                    fg="white",
+                )
+
+            ops.append(
+                UpdateOne(
+                    {"_id": doc["_id"]},
+                    {"$set": doc},
+                    upsert=True,
+                )
+            )
+
+        if dry_run:
+            click.secho(
+                f"[DRY-RUN] branches: would upsert {len(ops)} documents into "
+                f"{settings.mongo.db}.branches",
+                fg="yellow",
+            )
+            return
+
+        # 4) Execute bulk_write
+        result = coll.bulk_write(ops, ordered=False)
+
+        click.secho(
+            (
+                f"[branches] Upsert complete → "
+                f"matched={result.matched_count}, "
+                f"modified={result.modified_count}, "
+                f"upserted={len(result.upserted_ids)}"
+            ),
+            fg="green",
+        )
+
+    finally:
+        close_connections_safe(pg_conn, mongo_client)
