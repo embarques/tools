@@ -266,7 +266,7 @@ pg2mongo transfer all --start-date 2022-01-01 -v
 | customer, container, invoice, pickup | Uses `--start-date` / `--end-date` (same as individual commands) |
 | delivery | Maps date range to `--start-year` / `--end-year` |
 
-If one entity fails, the rest still run. A summary is printed at the end. With `-v`, the command stops on the first error to aid debugging.
+If one entity fails, the rest still run. A summary is printed at the end. With `-v`, the command stops on the first error to aid debugging. Each entity header shows step position (e.g. `Transfer: invoice (6/8)`); invoice shows a total count and progress bar.
 
 ### Common options
 
@@ -332,10 +332,12 @@ pg2mongo -c db.toml transfer customer
 
 Invoices are synced inside a **MongoDB transaction** per invoice (header + line items + barcodes).
 
+Before processing, a `COUNT` query reports how many invoices match the date window (e.g. `Invoices: 150 of 7,280 record(s) to process`). During the run you get a progress bar with position, percent, and ETA; with `-v`, each line is prefixed with `[current/total] (pct%)`.
+
 ```bash
 pg2mongo -c db.toml transfer invoice --start-date 2022-01-01
 pg2mongo -c db.toml transfer invoice --start-date 2022-01-01 --limit 10 --dry-run
-pg2mongo -c db.toml transfer invoice
+pg2mongo -c db.toml transfer invoice --start-date 2026-01-01 -v
 ```
 
 ### Pickups

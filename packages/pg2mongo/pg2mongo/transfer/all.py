@@ -174,9 +174,15 @@ def all_cmd(
     if verbose:
         click.secho("  Verbose: on", fg="cyan")
 
-    for entity, command in TRANSFER_STEPS:
+    total_steps = len(TRANSFER_STEPS)
+
+    for step_num, (entity, command) in enumerate(TRANSFER_STEPS, start=1):
         click.secho(f"\n{'─' * 60}", fg="cyan")
-        click.secho(f"Transfer: {entity}", fg="cyan", bold=True)
+        click.secho(
+            f"Transfer: {entity} ({step_num}/{total_steps})",
+            fg="cyan",
+            bold=True,
+        )
         click.secho(f"{'─' * 60}", fg="cyan")
 
         kwargs = _build_invoke_kwargs(

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 import click
-from datetime import datetime, timezone
 from pymongo.errors import PyMongoError
 
 from pg2mongo import collections as cols
@@ -19,6 +19,78 @@ from pg2mongo.transfer.common import (
     get_date_window,
     close_connections_safe,
 )
+from pg2mongo.transfer.progress import TransferProgress, count_sql_rows
+
+
+INVOICE_COUNT_SQL = """
+SELECT COUNT(*)::bigint AS cnt
+FROM vwinvoice_api v
+WHERE v.is_void = FALSE
+  AND v.registration = 'completed'
+  AND v.time_modified BETWEEN SYMMETRIC %s AND %s
+"""
+
+INVOICE_SELECT_SQL = """
+SELECT v.id,
+       v.number,
+       v.time_created,
+       v.time_modified,
+       v.is_void,
+       v.invoice_date,
+       v.branch_id,
+       v.container_id,
+       v.container_designation,
+       v.driver_id,
+       v.user_id,
+       COALESCE(u.username, ''::character varying) AS "user.name",
+       COALESCE(driver.name, ''::character varying) AS "driver.name",
+       v.cost,
+       v.paid_status,
+       v.paid_region,
+       v.balance,
+       v.payment,
+       v.discount,
+       v.recharge,
+
+       v."sender.id",
+       v."sender.cus_type",
+       v."sender.branch_id",
+       v."sender.name",
+       v."sender.phone1",
+       v."sender.phone2",
+       v."sender.address.address1",
+       v."sender.address.apt",
+       v."sender.time_created",
+       v."sender.created_by_id",
+       v."sender.address.address2",
+       v."sender.address.city",
+       v."sender.address.state",
+       v."sender.address.zipcode",
+       v."sender.address.country",
+
+       v."receiver.id",
+       v."receiver.cus_type",
+       v."receiver.branch_id",
+       v."receiver.name",
+       v."receiver.phone1",
+       v."receiver.phone2",
+       v."receiver.address.address1",
+       v."receiver.address.apt",
+       v."receiver.time_created",
+       v."receiver.created_by_id",
+       v."receiver.address.address2",
+       v."receiver.address.city",
+       v."receiver.address.state",
+       v."receiver.address.zipcode",
+       v."receiver.address.country"
+FROM vwinvoice_api v
+LEFT JOIN auth_user u ON u.id = v.user_id
+LEFT JOIN employee driver ON driver.id = v.driver_id
+WHERE v.is_void = FALSE
+  AND v.registration = 'completed'
+  AND v.time_modified BETWEEN SYMMETRIC %s AND %s
+ORDER BY v.invoice_date ASC
+"""
 
 
 @click.command("invoice")
@@ -78,15 +150,11 @@ def invoice_cmd(
     mongo_client = None
 
     try:
-        # Establish connections to Postgres and MongoDB
         pg_conn, mongo_client = connect_postgres_and_mongo(settings, verbose)
 
         mongo_db_name = settings.mongo.db
-
-        # MongoDB invoices collection
         coll = get_collection(mongo_client, mongo_db_name, cols.INVOICES)
 
-        # Calculate time window to fetch invoices from Postgres
         start_iso, end_iso = get_date_window(
             coll=coll,
             start_date=start_date,
@@ -94,105 +162,51 @@ def invoice_cmd(
             verbose=verbose,
         )
 
-        # Query to pull invoice header information from Postgres
-        sql = """
-        SELECT v.id,
-               v.number,
-               v.time_created,
-               v.time_modified,
-               v.is_void,
-               v.invoice_date,
-               v.branch_id,
-               v.container_id,
-               v.container_designation,
-               v.driver_id,
-               v.user_id,
-               COALESCE(u.username, ''::character varying) AS "user.name",
-               COALESCE(driver.name, ''::character varying) AS "driver.name",
-               v.cost,
-               v.paid_status,
-               v.paid_region,
-               v.balance,
-               v.payment,
-               v.discount,
-               v.recharge,
-
-               v."sender.id",
-               v."sender.cus_type",
-               v."sender.branch_id",
-               v."sender.name",
-               v."sender.phone1",
-               v."sender.phone2",
-               v."sender.address.address1",
-               v."sender.address.apt",
-               v."sender.time_created",
-               v."sender.created_by_id",
-               v."sender.address.address2",
-               v."sender.address.city",
-               v."sender.address.state",
-               v."sender.address.zipcode",
-               v."sender.address.country",
-
-               v."receiver.id",
-               v."receiver.cus_type",
-               v."receiver.branch_id",
-               v."receiver.name",
-               v."receiver.phone1",
-               v."receiver.phone2",
-               v."receiver.address.address1",
-               v."receiver.address.apt",
-               v."receiver.time_created",
-               v."receiver.created_by_id",
-               v."receiver.address.address2",
-               v."receiver.address.city",
-               v."receiver.address.state",
-               v."receiver.address.zipcode",
-               v."receiver.address.country"
-        FROM vwinvoice_api v
-        LEFT JOIN auth_user u ON u.id = v.user_id
-        LEFT JOIN employee driver ON driver.id = v.driver_id
-        WHERE v.is_void = FALSE
-          AND v.registration = 'completed'
-          AND v.time_modified BETWEEN SYMMETRIC %s AND %s
-        ORDER BY v.invoice_date ASC
-        """
-
         if verbose:
             click.secho(
                 f"[query] Running invoice query between {start_iso} and {end_iso}",
                 fg="cyan",
             )
 
-        processed = 0
+        total = count_sql_rows(pg_conn, INVOICE_COUNT_SQL, (start_iso, end_iso))
+        progress = TransferProgress(
+            label="Invoices",
+            total=total,
+            limit=limit,
+            verbose=verbose,
+        )
+        progress.announce()
 
-        # Execute invoice query
-        with pg_conn.cursor() as cur:
-            cur.execute(sql, (start_iso, end_iso))
+        with progress:
+            with pg_conn.cursor() as cur:
+                cur.execute(INVOICE_SELECT_SQL, (start_iso, end_iso))
 
-            # Process invoice rows one at a time
-            for row in cur:
-                processed += 1
-                if limit and processed > limit:
-                    break
+                for row in cur:
+                    if limit and progress.current >= limit:
+                        break
 
-                # Process this invoice: upsert header + insert details
-                _process_single_invoice(
-                    pg_conn=pg_conn,
-                    mongo_client=mongo_client,
-                    mongo_db_name=mongo_db_name,
-                    coll=coll,
-                    row=row,
-                    dry_run=dry_run,
-                    verbose=verbose,
-                )
+                    doc = build_invoice_doc(row)
+                    hint = f"oldID={doc.get('oldID')} number={doc.get('number')}"
+                    progress.step(hint, emit=verbose)
+
+                    _process_single_invoice(
+                        pg_conn=pg_conn,
+                        mongo_client=mongo_client,
+                        mongo_db_name=mongo_db_name,
+                        coll=coll,
+                        row=row,
+                        dry_run=dry_run,
+                        verbose=verbose,
+                        progress=progress,
+                    )
 
         click.secho(
-            f"✅ Invoice transfer complete. Processed={processed}, dry_run={dry_run}",
+            f"✅ Invoice transfer complete. {progress.summary(dry_run=dry_run)}, "
+            f"dry_run={dry_run}",
             fg="green",
         )
 
     finally:
-        # Always close DB connections
         close_connections_safe(pg_conn, mongo_client)
 
 
@@ -204,6 +218,7 @@ def _process_single_invoice(
     row,
     dry_run: bool,
     verbose: bool,
+    progress: TransferProgress,
 ):
     """
     Handles the full ingestion of a single invoice:
@@ -218,55 +233,38 @@ def _process_single_invoice(
     If any step fails, MongoDB automatically rolls back the entire invoice.
     """
 
-    # Convert SQL row → invoice MongoDB document
     doc = build_invoice_doc(row)
     old_id = doc.get("oldID")
     number = doc.get("number")
 
     if old_id is None:
-        click.secho("[warn] invoice missing oldID; skipping", fg="yellow")
+        progress.secho("invoice missing oldID; skipping", fg="yellow")
         return
 
-    if verbose:
-        click.secho(
-            f"\n[invoice] Processing invoice oldID={old_id}, number={number}",
-            fg="white",
-        )
-
-    # Timestamp refresh — ensures invoice gets updatedAt on every sync
     doc["updatedAt"] = datetime.now(timezone.utc)
 
-    # ------------------------
-    # DRY RUN MODE
-    # ------------------------
     if dry_run:
-        # Load associated details + barcodes just for reporting
-        details = load_invoice_details(pg_conn, old_id)
+        details = load_invoice_details(pg_conn, old_id, verbose=verbose)
         detail_count = len(details)
         barcode_count = sum(len(d.get("barcodes", [])) for d in details)
 
-        click.secho(
-            f"[dry-run] Would upsert invoice oldID={old_id}, number={number}",
-            fg="yellow",
-        )
-        click.secho(
-            f"[dry-run] Would insert {detail_count} doc(s) into "
-            f"{cols.INVOICE_DETAILS}, "
-            f"barcodes={barcode_count}",
-            fg="yellow",
-        )
+        if verbose:
+            progress.secho(
+                f"[dry-run] Would upsert invoice oldID={old_id}, number={number}",
+                fg="yellow",
+            )
+            progress.secho(
+                f"[dry-run] Would insert {detail_count} doc(s) into "
+                f"{cols.INVOICE_DETAILS}, barcodes={barcode_count}",
+                fg="yellow",
+            )
         return
 
-    # Real write mode below
     invoices_coll = coll
 
-    # Use MongoDB session for per-invoice transaction
     with mongo_client.start_session() as session:
 
         def txn_ops(sess):
-            # -----------------------------------------------------------
-            # 1) UPSERT invoice header (using oldID as natural identifier)
-            # -----------------------------------------------------------
             result = invoices_coll.update_one(
                 {"oldID": old_id},
                 {"$set": doc},
@@ -274,7 +272,6 @@ def _process_single_invoice(
                 session=sess,
             )
 
-            # Retrieve invoice MongoDB _id
             if result.upserted_id is not None:
                 invoice_id = result.upserted_id
                 inserted = True
@@ -293,19 +290,11 @@ def _process_single_invoice(
 
             if verbose:
                 action = "inserted" if inserted else "updated"
-                click.secho(
+                progress.secho(
                     f"[invoice] Header {action}: _id={invoice_id}, oldID={old_id}",
                     fg="blue",
                 )
 
-            # -----------------------------------------------------------
-            # 2) INSERT invoice details + barcodes
-            #
-            #    add_invoice_details:
-            #      - Loads invoice details + barcodes from Postgres
-            #      - Inserts them into invoice_details collection
-            #      - Updates invoice.invoice_details with the new IDs
-            # -----------------------------------------------------------
             add_invoice_details(
                 pg_conn=pg_conn,
                 mongo_client=mongo_client,
@@ -316,11 +305,10 @@ def _process_single_invoice(
                 verbose=verbose,
             )
 
-        # Execute transaction for this invoice
         try:
             session.with_transaction(txn_ops)
             if verbose:
-                click.secho(
+                progress.secho(
                     f"[ok] Invoice oldID={old_id} fully committed (header + details)",
                     fg="green",
                 )
