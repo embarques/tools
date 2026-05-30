@@ -6,6 +6,7 @@ import click
 from pymongo.errors import PyMongoError
 
 from pg2mongo import collections as cols
+from pg2mongo.cli.context import get_config_path, get_verbose
 from pg2mongo.transfer.common import (
     resolve_settings,
     connect_postgres_and_mongo,
@@ -20,8 +21,8 @@ def init_indexes_cmd(ctx: click.Context):
     """
     Initialize Mongo indexes and seed counters collection.
     """
-    config_path = ctx.obj.get("config_path")
-    verbose = ctx.obj.get("verbose", False)
+    config_path = get_config_path(ctx)
+    verbose = get_verbose(ctx)
 
     settings = resolve_settings(config_path, verbose)
     pg_conn = None

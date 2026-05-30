@@ -9,18 +9,18 @@ from pymongo import UpdateOne
 from pg2mongo.builders.delivery_build import build_delivery_doc
 from pg2mongo import collections as cols
 from pg2mongo.clients import connect_postgres, connect_mongo
-from pg2mongo.transfer.common import resolve_settings, close_connections_safe
+from pg2mongo.cli.context import get_verbose
+from pg2mongo.transfer.common import resolve_settings_from_ctx, close_connections_safe
 
 
 DELIVERY_SQL = """
 SELECT
     id,
-    time_created,
-    time_modified,
+    gen_num,
+    delivery_date,
     delivery_number,
     container_id,
     container_designation,
-    delivery_date,
     employee_id,
     employee_name,
     helper1_id,
@@ -28,7 +28,7 @@ SELECT
     helper2_id,
     helper2_name
 FROM vwdelivery_api
-WHERE date_part('year', time_created) BETWEEN %s AND %s
+WHERE date_part('year', delivery_date) BETWEEN %s AND %s
 ORDER BY id
 """
 
@@ -38,13 +38,13 @@ ORDER BY id
     "--start-year",
     type=int,
     default=2022,
-    help="Start year for deliveries (time_created year). Defaults to 2022.",
+    help="Start year for deliveries (delivery_date year). Defaults to 2022.",
 )
 @click.option(
     "--end-year",
     type=int,
     default=None,
-    help="End year for deliveries (time_created year). Defaults to current year.",
+    help="End year for deliveries (delivery_date year). Defaults to current year.",
 )
 @click.option(
     "--limit",
@@ -68,13 +68,12 @@ def delivery_cmd(
     """
     Transfer delivery records from Postgres → MongoDB (deliveries collection).
     """
-    config_path = ctx.obj.get("config_path")
-    verbose = bool(ctx.obj.get("verbose"))
+    verbose = get_verbose(ctx)
 
     if end_year is None:
         end_year = datetime.utcnow().year
 
-    settings = resolve_settings(config_path, verbose)
+    settings = resolve_settings_from_ctx(ctx)
 
     pg_conn = None
     mongo_client = None
@@ -141,8 +140,8 @@ def delivery_cmd(
 
         if dry_run:
             click.secho(
-                f"[DRY-RUN] deliveries: would upsert {len(ops)} documents into "
-                f"{settings.mongo.db}.deliveries",
+                f"[DRY-RUN] would upsert {len(ops)} documents into "
+                f"{cols.qualified(settings.mongo.db, cols.DELIVERIES)}",
                 fg="yellow",
             )
             return

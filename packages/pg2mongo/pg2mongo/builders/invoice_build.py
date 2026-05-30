@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, Any
 
+from pg2mongo import collections as cols
 from pg2mongo.utils import to_utc, decimal_to_float
 
 def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -26,7 +27,7 @@ def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         "payment": decimal_to_float(row.get("payment") or 0),
         "balance": decimal_to_float(row.get("balance") or 0),
         "surcharge": decimal_to_float(row.get("recharge") or 0),
-        "invoiceDetails": [],
+        cols.INVOICE_DETAILS_FIELD: [],
     }
 
     # Sender

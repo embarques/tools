@@ -7,8 +7,9 @@ from pymongo import UpdateOne
 from pymongo.errors import PyMongoError
 
 from pg2mongo import collections as cols
+from pg2mongo.cli.context import get_verbose
 from pg2mongo.transfer.common import (
-    resolve_settings,
+    resolve_settings_from_ctx,
     connect_postgres_and_mongo,
     get_date_window,
     close_connections_safe,
@@ -51,10 +52,8 @@ def pickup_cmd(
     """
     Transfer pickups from Postgres vwpickup_api to Mongo pickups collection.
     """
-    config_path = ctx.obj.get("config_path")
-    verbose = ctx.obj.get("verbose", False)
-
-    settings = resolve_settings(config_path, verbose)
+    verbose = get_verbose(ctx)
+    settings = resolve_settings_from_ctx(ctx)
     pg_conn = None
     mongo_client = None
 

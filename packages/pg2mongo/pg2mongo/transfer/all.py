@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 import click
 
+from pg2mongo.cli.context import get_verbose
 from pg2mongo.dates import parse_user_date
 from pg2mongo.transfer.branch import branch_cmd
 from pg2mongo.transfer.container import container_cmd
@@ -132,6 +133,12 @@ TRANSFER_STEPS: list[tuple[str, click.Command]] = [
     default=0,
     help="Limit records per entity (0 = no limit).",
 )
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose output (per-record progress; especially useful for invoice).",
+)
 @click.pass_context
 def all_cmd(
     ctx: click.Context,
@@ -139,15 +146,19 @@ def all_cmd(
     end_date: Optional[str],
     dry_run: bool,
     limit: int,
+    verbose: bool,
 ):
     """
     Transfer all entities from Postgres to MongoDB in dependency order.
 
     Date-based entities (customer, container, invoice, pickup) use the same
     start/end date window as individual transfer commands. Deliveries map the
-    date range to start/end years. Branch, employee, and user always run a full sync.
+    date range to start/end years.     Branch, employee, and user always run a full sync.
     """
-    verbose = bool(ctx.obj.get("verbose", False))
+    if verbose:
+        ctx.ensure_object(dict)
+        ctx.obj["verbose"] = True
+    verbose = get_verbose(ctx)
     failed: list[str] = []
 
     click.secho("Starting full transfer (all entities)", fg="cyan", bold=True)
@@ -160,6 +171,8 @@ def all_cmd(
         click.secho("  Mode: dry-run", fg="yellow")
     if limit:
         click.secho(f"  Limit: {limit} records per entity", fg="cyan")
+    if verbose:
+        click.secho("  Verbose: on", fg="cyan")
 
     for entity, command in TRANSFER_STEPS:
         click.secho(f"\n{'─' * 60}", fg="cyan")

@@ -13,6 +13,7 @@ from pymongo.errors import (
 )
 
 from pg2mongo.admin import ensure_business_indexes, seed_counters
+from pg2mongo.cli.context import get_config_path, get_verbose
 from pg2mongo.clients import connect_mongo
 from pg2mongo.mongo_uri import redact_mongo_uri
 from pg2mongo.transfer.common import resolve_settings
@@ -28,8 +29,8 @@ def init_db_cmd(
     dry_run: bool,
 ) -> None:
     """Initialize MongoDB: ensure indexes and seed counters (idempotent)."""
-    config_path = ctx.obj.get("config_path")
-    verbose = ctx.obj.get("verbose", False)
+    config_path = get_config_path(ctx)
+    verbose = get_verbose(ctx)
     settings = resolve_settings(config_path, verbose)
 
     mongo_client = None

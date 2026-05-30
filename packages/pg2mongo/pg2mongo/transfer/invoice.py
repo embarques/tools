@@ -14,7 +14,7 @@ from pg2mongo.builders.invoice_detail_build import (
     load_invoice_details,
 )
 from pg2mongo.transfer.common import (
-    resolve_settings,
+    resolve_settings_from_ctx,
     connect_postgres_and_mongo,
     get_date_window,
     close_connections_safe,
@@ -65,16 +65,14 @@ def invoice_cmd(
          - Upsert the invoice header.
          - Load invoiceDetail + barcode rows from Postgres.
          - Insert invoice details into their collection.
-         - Update invoice.invoiceDetails with inserted IDs.
+         - Update invoice document with detail reference IDs.
       3. If any step fails, the transaction rolls back and the invoice is NOT created.
 
     This guarantees a COMPLETE invoice (header + details + barcodes)
     is always recorded in MongoDB, never a partial document.
     """
 
-    config_path = ctx.obj.get("config_path")
-    verbose = verbose or bool(ctx.obj.get("verbose", False))
-    settings = resolve_settings(config_path, verbose)
+    settings = resolve_settings_from_ctx(ctx, verbose=verbose)
 
     pg_conn = None
     mongo_client = None
@@ -98,63 +96,65 @@ def invoice_cmd(
 
         # Query to pull invoice header information from Postgres
         sql = """
-        SELECT id,
-               number,
-               time_created,
-               time_modified,
-               is_void,
-               invoice_date,
-               branch_id,
-               container_id,
-               container_designation,
-               "driver_id",
-               "user_id",
-               "user.name",
-               "driver.name",
-               cost,
-               paid_status,
-               paid_region,
-               balance,
-               payment,
-               discount,
-               recharge,
+        SELECT v.id,
+               v.number,
+               v.time_created,
+               v.time_modified,
+               v.is_void,
+               v.invoice_date,
+               v.branch_id,
+               v.container_id,
+               v.container_designation,
+               v.driver_id,
+               v.user_id,
+               COALESCE(u.username, ''::character varying) AS "user.name",
+               COALESCE(driver.name, ''::character varying) AS "driver.name",
+               v.cost,
+               v.paid_status,
+               v.paid_region,
+               v.balance,
+               v.payment,
+               v.discount,
+               v.recharge,
 
-               "sender.id",
-               "sender.cus_type",
-               "sender.branch_id",
-               "sender.name",
-               "sender.phone1",
-               "sender.phone2",
-               "sender.address.address1",
-               "sender.address.apt",
-               "sender.time_created",
-               "sender.created_by_id",
-               "sender.address.address2",
-               "sender.address.city",
-               "sender.address.state",
-               "sender.address.zipcode",
-               "sender.address.country",
+               v."sender.id",
+               v."sender.cus_type",
+               v."sender.branch_id",
+               v."sender.name",
+               v."sender.phone1",
+               v."sender.phone2",
+               v."sender.address.address1",
+               v."sender.address.apt",
+               v."sender.time_created",
+               v."sender.created_by_id",
+               v."sender.address.address2",
+               v."sender.address.city",
+               v."sender.address.state",
+               v."sender.address.zipcode",
+               v."sender.address.country",
 
-               "receiver.id",
-               "receiver.cus_type",
-               "receiver.branch_id",
-               "receiver.name",
-               "receiver.phone1",
-               "receiver.phone2",
-               "receiver.address.address1",
-               "receiver.address.apt",
-               "receiver.time_created",
-               "receiver.created_by_id",
-               "receiver.address.address2",
-               "receiver.address.city",
-               "receiver.address.state",
-               "receiver.address.zipcode",
-               "receiver.address.country"
-        FROM vwinvoice_api
-        WHERE is_void = FALSE
-          AND registration = 'completed'
-          AND time_modified BETWEEN SYMMETRIC %s AND %s
-        ORDER BY invoice_date ASC
+               v."receiver.id",
+               v."receiver.cus_type",
+               v."receiver.branch_id",
+               v."receiver.name",
+               v."receiver.phone1",
+               v."receiver.phone2",
+               v."receiver.address.address1",
+               v."receiver.address.apt",
+               v."receiver.time_created",
+               v."receiver.created_by_id",
+               v."receiver.address.address2",
+               v."receiver.address.city",
+               v."receiver.address.state",
+               v."receiver.address.zipcode",
+               v."receiver.address.country"
+        FROM vwinvoice_api v
+        LEFT JOIN auth_user u ON u.id = v.user_id
+        LEFT JOIN employee driver ON driver.id = v.driver_id
+        WHERE v.is_void = FALSE
+          AND v.registration = 'completed'
+          AND v.time_modified BETWEEN SYMMETRIC %s AND %s
+        ORDER BY v.invoice_date ASC
         """
 
         if verbose:
@@ -250,7 +250,8 @@ def _process_single_invoice(
             fg="yellow",
         )
         click.secho(
-            f"[dry-run] Would insert invoiceDetails={detail_count}, "
+            f"[dry-run] Would insert {detail_count} doc(s) into "
+            f"{cols.INVOICE_DETAILS}, "
             f"barcodes={barcode_count}",
             fg="yellow",
         )
@@ -302,8 +303,8 @@ def _process_single_invoice(
             #
             #    add_invoice_details:
             #      - Loads invoice details + barcodes from Postgres
-            #      - Inserts them into invoiceDetails collection
-            #      - Updates invoice.invoiceDetails with the new IDs
+            #      - Inserts them into invoice_details collection
+            #      - Updates invoice.invoice_details with the new IDs
             # -----------------------------------------------------------
             add_invoice_details(
                 pg_conn=pg_conn,

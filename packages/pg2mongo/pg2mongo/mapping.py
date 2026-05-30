@@ -90,7 +90,7 @@ def map_invoice_view_row_to_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         recharge=_to_float(row.get("recharge")),
         sender=sender,
         receiver=receiver,
-        invoiceDetails=None,
+        invoice_details=None,
     ).model_dump()
     return doc
 

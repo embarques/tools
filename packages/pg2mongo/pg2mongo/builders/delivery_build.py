@@ -10,19 +10,10 @@ def build_delivery_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     Map a Postgres delivery row from vwdelivery_api into the MongoDB delivery document.
 
     Expected row keys from SQL:
-      id,
-      time_created,
-      time_modified,
-      delivery_number,
-      container_id,
-      container_designation,
-      delivery_date,
-      employee_id,
-      employee_name,
-      helper1_id,
-      helper1_name,
-      helper2_id,
-      helper2_name
+      id, gen_num, delivery_date, delivery_number,
+      container_id, container_designation,
+      employee_id, employee_name,
+      helper1_id, helper1_name, helper2_id, helper2_name
     """
 
     # Container subdocument
@@ -55,6 +46,8 @@ def build_delivery_doc(row: Dict[str, Any]) -> Dict[str, Any]:
             "name": row.get("helper2_name") or "",
         }
 
+    delivery_dt = to_utc(row.get("delivery_date"))
+
     doc: Dict[str, Any] = {
         "_id": row["id"],
         "name": row.get("delivery_number") or "",
@@ -62,9 +55,9 @@ def build_delivery_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         "employee": employee,
         "helper1": helper1,
         "helper2": helper2,
-        "date": to_utc(row.get("delivery_date")),
-        "createdAt": to_utc(row.get("time_created")),
-        "updatedAt": to_utc(row.get("time_modified")),
+        "date": delivery_dt,
+        "createdAt": delivery_dt,
+        "updatedAt": delivery_dt,
     }
 
     return doc

@@ -72,7 +72,7 @@ class InvoiceDocument(BaseModel):
     sender: Optional[Party] = None
     receiver: Optional[Party] = None
 
-    invoiceDetails: Optional[List[InvoiceDetailRef]] = None
+    invoice_details: Optional[List[InvoiceDetailRef]] = None
 
 
 class CustomerDocument(BaseModel):

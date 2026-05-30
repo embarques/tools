@@ -3,6 +3,7 @@ from __future__ import annotations
 import click
 from pymongo.errors import PyMongoError
 
+from pg2mongo.cli.context import get_config_path
 from pg2mongo.transfer.common import (
     resolve_settings,
     close_connections_safe,
@@ -17,7 +18,7 @@ def test_connection_cmd(ctx: click.Context):
     Test and validate connection to Postgres and MongoDB.
     Prints connection status and database names.
     """
-    config_path = ctx.obj.get("config_path")
+    config_path = get_config_path(ctx)
 
     # For this command we want clear output; we don't need noisy internals.
     settings = resolve_settings(config_path, verbose=True)

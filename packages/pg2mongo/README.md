@@ -22,9 +22,10 @@ clean, incremental, and developer-friendly way.
 
 Multi-word MongoDB collection names use **snake_case**. Constants live in `pg2mongo/collections.py`:
 
-| Collection | Name |
+| Collection / field | Name |
 |------------|------|
-| Invoice line items | `invoice_details` |
+| Invoice line items (collection) | `invoice_details` |
+| Invoice detail refs (field on invoice doc) | `invoice_details` |
 | Activity logs | `activity_logs` |
 | Income statements | `income_statements` |
 
@@ -34,7 +35,7 @@ Single-word collections (`invoices`, `customers`, `pickups`, etc.) stay lowercas
 
 ## Features
 
-- Reads config from **`db.toml`** or **`.env`**
+- Reads config from **`db.toml`** (single config file)
 - Supports **MongoDB replica sets** (`mongodb://`) and **MongoDB Atlas** (`mongodb+srv://`)
 - Initializes Mongo indexes and counter sequences for a new database
 - Transfers data using **date windows** (or year ranges for deliveries)
@@ -65,32 +66,36 @@ pg2mongo --version
 
 ## 2. Configuration
 
-Copy the example files and edit with your credentials:
+pg2mongo uses **one config file**: `db.toml`. There is no `.env` support.
 
 ```bash
-cp .env.example .env
 cp db.example.toml db.toml
+# edit db.toml with your Postgres and Mongo credentials
 ```
 
 | File | Purpose |
 |------|---------|
-| `.env.example` | Sample environment variables → copy to `.env` |
-| `db.example.toml` | Sample TOML config → copy to `db.toml` |
+| `db.example.toml` | Sample config → copy to `db.toml` |
+| `db.toml` | Your real credentials (git-ignored) |
 
-Both real config files are git-ignored. **Never commit credentials.**
+### How it is loaded
 
-### Config priority
+1. If you pass `-c /path/to/db.toml`, that file is used.
+2. Otherwise pg2mongo auto-discovers `db.toml` in the current directory or the pg2mongo project root.
 
-- If you pass `-c db.toml` (or `--config`), **only the TOML file is used** — `.env` is ignored.
-- If you omit `-c`, settings are loaded from **`.env`** / environment variables.
+```bash
+# Auto-discover db.toml (most common)
+pg2mongo test-connection
+
+# Explicit path (useful when running from another directory)
+pg2mongo -c packages/pg2mongo/db.toml test-connection
+```
 
 ---
 
-### Option A — Replica set (default in example files)
+### Option A — Replica set (default in example file)
 
 Use a base URI **without** credentials. Set `username` and `password` separately — they are injected automatically.
-
-**`db.toml`**
 
 ```toml
 [postgres]
@@ -111,30 +116,12 @@ password = "your_mongo_password"
 upsert_key = "oldID"
 ```
 
-**`.env`**
-
-```bash
-POSTGRES_SERVER=embserver.embarques.net
-POSTGRES_PORT=5432
-POSTGRES_DB=carmencargodb
-POSTGRES_USERNAME=your_pg_user
-POSTGRES_PASSWORD=your_pg_password
-PG_SCHEMA=public
-
-MONGO_URI="mongodb://mongo1:27017,mongo2:27017,mongo3:27017/?replicaSet=rs0&connectTimeoutMS=10000&authSource=admin&authMechanism=SCRAM-SHA-256"
-MONGO_DB=emsysdb
-MONGO_USERNAME=your_mongo_user
-MONGO_PASSWORD=your_mongo_password
-```
-
 ---
 
 ### Option B — MongoDB Atlas
 
 Put the **full connection string with embedded credentials** in the URI.
-Leave `username` and `password` empty — they are not needed.
-
-**`db.toml`**
+Leave `username` and `password` empty.
 
 ```toml
 [mongo]
@@ -144,18 +131,9 @@ username = ""
 password = ""
 ```
 
-**`.env`**
-
-```bash
-MONGO_URI="mongodb+srv://your_user:your_password@cluster0.example.mongodb.net/?retryWrites=true&w=majority&authSource=admin"
-MONGO_DB=emsysdb
-MONGO_USERNAME=
-MONGO_PASSWORD=
-```
-
 > **Tip:** If you copy a URI from Studio 3T, pg2mongo automatically strips unsupported `3t.*` query parameters.
 
-> **Tip:** If the URI already contains `user:password@`, separate `MONGO_USERNAME` / `MONGO_PASSWORD` values are ignored.
+> **Tip:** If the URI already contains `user:password@`, separate `username` / `password` fields are ignored.
 
 ---
 
@@ -163,23 +141,14 @@ MONGO_PASSWORD=
 
 Always verify connectivity before running transfers.
 
-### Using `.env` (no config file)
-
 ```bash
 pg2mongo test-connection
 ```
 
-### Using `db.toml`
-
-```bash
-pg2mongo -c db.toml test-connection
-```
-
-### Verbose output
+Verbose output:
 
 ```bash
 pg2mongo -v test-connection
-pg2mongo -c db.toml -v test-connection
 ```
 
 ### Expected output
@@ -212,16 +181,14 @@ Before the first transfer into a new Mongo database, create indexes and seed cou
 ### Standard init (idempotent)
 
 ```bash
-pg2mongo -c db.toml init-indexes
-# or with .env:
 pg2mongo init-indexes
 ```
 
 ### Full init with drop/recreate indexes
 
 ```bash
-pg2mongo -c db.toml init-db --drop-existing
-pg2mongo -c db.toml init-db --dry-run    # preview only
+pg2mongo init-db --drop-existing
+pg2mongo init-db --dry-run    # preview only
 ```
 
 Both commands:
@@ -242,6 +209,8 @@ All transfers follow this pattern:
 pg2mongo [-c db.toml] [-v] transfer <entity> [options]
 ```
 
+If `db.toml` is in the current directory (or pg2mongo project root), `-c` is optional.
+
 ### Entities
 
 `all` · `branch` · `customer` · `container` · `delivery` · `employee` · `invoice` · `pickup` · `user`
@@ -252,7 +221,7 @@ Run every entity in dependency order:
 
 **branch → employee → user → customer → container → invoice → pickup → delivery**
 
-#### Using `.env`
+#### Examples
 
 ```bash
 # Full backfill from a start date through today
@@ -270,20 +239,14 @@ pg2mongo transfer all
 # Dry-run first (recommended before a large backfill)
 pg2mongo transfer all --start-date 2026-01-01 --limit 50 --dry-run
 
-# Verbose output
+# Verbose output (per-record progress; useful for invoice)
+pg2mongo transfer all --start-date 2026-01-01 -v
+
+# Global verbose also works (must appear before subcommands)
 pg2mongo -v transfer all --start-date 2026-01-01
 
-# Verbose + dry-run + limit
-pg2mongo -v transfer all --start-date 2026-01-01 --limit 50 --dry-run
-```
-
-#### Using `db.toml`
-
-```bash
-pg2mongo -c db.toml transfer all --start-date 2022-01-01
-pg2mongo -c db.toml transfer all --start-date 2026-01-01 --end-date 2026-05-30
-pg2mongo -c db.toml -v transfer all --start-date 2026-01-01 --dry-run
-pg2mongo -c db.toml transfer all
+# From another directory — pass config explicitly
+pg2mongo -c packages/pg2mongo/db.toml transfer all --start-date 2026-01-01
 ```
 
 #### First-time full import
@@ -292,7 +255,7 @@ pg2mongo -c db.toml transfer all
 source .venv/bin/activate
 pg2mongo test-connection
 pg2mongo init-indexes
-pg2mongo -v transfer all --start-date 2022-01-01
+pg2mongo transfer all --start-date 2022-01-01 -v
 ```
 
 #### Behavior by entity
@@ -315,7 +278,7 @@ If one entity fails, the rest still run. A summary is printed at the end. With `
 | `--end-year` | delivery | End year (default: current year) |
 | `--dry-run` | all | Preview actions without writing to Mongo |
 | `--limit N` | all | Limit records **per entity** (`0` = no limit) |
-| `-v / --verbose` | all | Extra debug output |
+| `-v / --verbose` | **all**, global | Per-record progress and debug output |
 
 ---
 
@@ -349,7 +312,7 @@ pg2mongo transfer all --start-date 2022-01-01
 pg2mongo transfer all
 
 # Safe preview before a large run
-pg2mongo -v transfer all --start-date 2026-01-01 --limit 50 --dry-run
+pg2mongo transfer all --start-date 2026-01-01 --limit 50 --dry-run -v
 ```
 
 ### Customers
@@ -409,21 +372,9 @@ pg2mongo -c db.toml transfer branch --limit 5 --dry-run
 ### Deliveries (year range)
 
 ```bash
-pg2mongo -c db.toml transfer delivery
-pg2mongo -c db.toml transfer delivery --start-year 2023 --end-year 2024
-pg2mongo -c db.toml transfer delivery --start-year 2023 --end-year 2024 --limit 50 --dry-run
-```
-
-### Using `.env` instead of `db.toml`
-
-Omit `-c db.toml` from any command:
-
-```bash
-pg2mongo test-connection
-pg2mongo transfer all --start-date 2022-01-01
-pg2mongo transfer all
-pg2mongo transfer customer --dry-run
-pg2mongo -v transfer invoice --start-date 2025-01-01 --end-date 2025-10-31 --limit 10 --dry-run
+pg2mongo transfer delivery
+pg2mongo transfer delivery --start-year 2023 --end-year 2024
+pg2mongo transfer delivery --start-year 2023 --end-year 2024 --limit 50 --dry-run
 ```
 
 ---
@@ -432,7 +383,7 @@ pg2mongo -v transfer invoice --start-date 2025-01-01 --end-date 2025-10-31 --lim
 
 | Flag | Description |
 |------|-------------|
-| `-c / --config` | Path to `db.toml` (overrides `.env`) |
+| `-c / --config` | Path to `db.toml` (optional if auto-discovered) |
 | `-v / --verbose` | Additional debug output |
 | `--version` | Show version |
 | `-h / --help` | Show help |
@@ -459,7 +410,7 @@ pg2mongo test-connection
 pg2mongo transfer all
 
 # Or with verbose output
-pg2mongo -v transfer all
+pg2mongo transfer all -v
 
 # Or run entities individually:
 pg2mongo transfer branch
@@ -486,7 +437,6 @@ pg2mongo transfer all --start-date 2026-01-01 --end-date 2026-05-30
 pg2mongo/
   pyproject.toml
   README.md
-  .env.example
   db.example.toml
 
   pg2mongo/

@@ -3,7 +3,7 @@
 # Helpers to:
 #   - Load invoice details + barcodes from Postgres (vwinvoice_details_api)
 #   - Insert them into MongoDB (invoice_details collection)
-#   - Link them back to the parent invoice document (invoices.invoiceDetails)
+#   - Link them back to the parent invoice document (invoices.invoice_details)
 
 from datetime import datetime, timezone
 from typing import List, Dict, Any
@@ -74,8 +74,8 @@ def build_barcode_doc(rec: Dict[str, Any]) -> Dict[str, Any] | None:
         "number": number,
     }
 
-    # gen_num → barcode _id
-    gen_id = _safe_int(rec.get("barcode.gen_num"))
+    # gen_num / id → barcode _id (column name varies by Postgres view version)
+    gen_id = _safe_int(rec.get("barcode.gen_num") or rec.get("barcode.id"))
     if gen_id > 0:
         barcode["_id"] = gen_id
 
@@ -165,10 +165,10 @@ def load_invoice_details(
             "barcode.invoice_detail_id",
             "barcode.scandate",
             "barcode.time_modified",
-            "barcode.gen_num"
+            "barcode.id"
         FROM vwinvoice_details_api
         WHERE invoice_id = %s
-        ORDER BY id, "barcode.id";
+        ORDER BY id;
     """
 
     if verbose:
@@ -269,13 +269,13 @@ def add_invoice_details(
         if verbose:
             click.secho(
                 f"[details] No details found for oldID={invoice_old_id}; "
-                f"setting invoice.invoiceDetails = [].",
+                f"setting {cols.INVOICES}.{cols.INVOICE_DETAILS_FIELD} = [].",
                 fg="yellow",
             )
 
         inv_collection.update_one(
             {"_id": invoice_id},
-            {"$set": {"invoiceDetails": []}},
+            {"$set": {cols.INVOICE_DETAILS_FIELD: []}},
             session=session,
         )
         return []
@@ -289,7 +289,8 @@ def add_invoice_details(
 
     if verbose:
         click.secho(
-            f"[details] Inserting {len(details)} detail(s) for oldID={invoice_old_id}",
+            f"[details] Inserting {len(details)} detail(s) into "
+            f"{cols.qualified(mongo_db_name, cols.INVOICE_DETAILS)} for oldID={invoice_old_id}",
             fg="blue",
         )
 
@@ -306,14 +307,14 @@ def add_invoice_details(
 
     inv_collection.update_one(
         {"_id": invoice_id},
-        {"$set": {"invoiceDetails": inv_details_refs}},
+        {"$set": {cols.INVOICE_DETAILS_FIELD: inv_details_refs}},
         session=session,
     )
 
     if verbose:
         click.secho(
-            f"[details] Updated invoice _id={invoice_id} with "
-            f"{len(inv_details_refs)} invoiceDetails reference(s)",
+            f"[details] Updated {cols.qualified(mongo_db_name, cols.INVOICES)} with "
+            f"{len(inv_details_refs)} {cols.INVOICE_DETAILS_FIELD} reference(s)",
             fg="green",
         )
 

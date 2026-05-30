@@ -43,3 +43,13 @@ def test_build_invoke_kwargs_branch_limit():
         verbose=False,
     )
     assert kw["limit"] is None
+
+
+def test_all_cmd_accepts_verbose_flag():
+    from click.testing import CliRunner
+    from pg2mongo.transfer.all import all_cmd
+
+    runner = CliRunner()
+    result = runner.invoke(all_cmd, ["--help"])
+    assert result.exit_code == 0
+    assert "--verbose" in result.output

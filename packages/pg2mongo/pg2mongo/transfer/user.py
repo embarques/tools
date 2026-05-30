@@ -8,7 +8,8 @@ from pymongo import UpdateOne
 from pg2mongo.builders.user_build import build_user_doc
 from pg2mongo import collections as cols
 from pg2mongo.clients import connect_postgres, connect_mongo
-from pg2mongo.transfer.common import resolve_settings, close_connections_safe
+from pg2mongo.cli.context import get_verbose
+from pg2mongo.transfer.common import resolve_settings_from_ctx, close_connections_safe
 
 
 USER_SQL = """
@@ -48,10 +49,8 @@ def user_cmd(
     """
     Transfer user records from Postgres → MongoDB (users collection).
     """
-    config_path = ctx.obj.get("config_path")
-    verbose = bool(ctx.obj.get("verbose"))
-
-    settings = resolve_settings(config_path, verbose)
+    verbose = get_verbose(ctx)
+    settings = resolve_settings_from_ctx(ctx)
 
     pg_conn = None
     mongo_client = None
@@ -107,7 +106,8 @@ def user_cmd(
 
         if dry_run:
             click.secho(
-                f"[DRY-RUN] users: would upsert {len(ops)} documents into {settings.mongo.db}.users",
+                f"[DRY-RUN] would upsert {len(ops)} documents into "
+                f"{cols.qualified(settings.mongo.db, cols.USERS)}",
                 fg="yellow",
             )
             return

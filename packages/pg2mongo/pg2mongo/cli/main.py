@@ -30,7 +30,7 @@ from pg2mongo.transfer.all import all_cmd
     "--config",
     "config_path",
     type=click.Path(exists=True, dir_okay=False),
-    help="Path to db.toml config file.",
+    help="Path to db.toml (default: auto-discover db.toml in cwd or project root).",
 )
 @click.option(
     "-v",

@@ -6,7 +6,8 @@ from typing import Tuple, Optional
 import click
 from pymongo import MongoClient
 
-from pg2mongo.config import load_settings, Settings
+from pg2mongo.config import load_settings, Settings, resolve_config_path
+from pg2mongo.cli.context import get_config_path, get_verbose
 from pg2mongo.clients import connect_postgres, connect_mongo, close_connections
 from pg2mongo.dates import inclusive_window, parse_user_date
 
@@ -14,14 +15,18 @@ from pg2mongo.dates import inclusive_window, parse_user_date
 DEFAULT_START_DATE = date(2022, 1, 1)
 
 
+def resolve_settings_from_ctx(ctx: click.Context, verbose: bool = False) -> Settings:
+    """Load settings using config_path / verbose from the Click context chain."""
+    config_path = get_config_path(ctx)
+    verbose = verbose or get_verbose(ctx)
+    return resolve_settings(config_path, verbose)
+
+
 def resolve_settings(config_path: str | None, verbose: bool) -> Settings:
-    settings = load_settings(config_path)
+    path = resolve_config_path(config_path)
+    settings = load_settings(str(path))
     if verbose:
-        click.secho(
-            f"Using {'config file' if config_path else 'environment'}: "
-            f"{config_path or 'ENV'}",
-            fg="cyan",
-        )
+        click.secho(f"Using config file: {path}", fg="cyan")
         click.secho(
             f"[DEBUG] Postgres DB: {settings.postgres.db} | Mongo DB: {settings.mongo.db}",
             fg="cyan",

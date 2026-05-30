@@ -1,12 +1,44 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
+import click
 import tomllib
 from pydantic import BaseModel
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pg2mongo.mongo_uri import build_mongo_uri
+
+# pg2mongo project root (contains db.toml when installed editable)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_CONFIG_NAME = "db.toml"
+
+
+def _find_db_toml() -> Path | None:
+    for candidate in (Path.cwd() / DEFAULT_CONFIG_NAME, _PROJECT_ROOT / DEFAULT_CONFIG_NAME):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def resolve_config_path(config_path: Optional[str]) -> Path:
+    """Return the TOML config file path (explicit ``-c`` or auto-discovered ``db.toml``)."""
+    if config_path:
+        path = Path(config_path)
+        if not path.is_file():
+            raise click.ClickException(f"Config file not found: {path}")
+        return path
+
+    found = _find_db_toml()
+    if found is not None:
+        return found
+
+    raise click.ClickException(
+        "No configuration found.\n"
+        f"  • Copy db.example.toml to {DEFAULT_CONFIG_NAME} and edit it, or\n"
+        f"  • Pass an explicit path: pg2mongo -c /path/to/{DEFAULT_CONFIG_NAME}\n"
+        f"  Searched: {Path.cwd()}, {_PROJECT_ROOT}"
+    )
 
 
 class PostgresConfig(BaseModel):
@@ -39,62 +71,24 @@ class Settings(BaseModel):
     transfer: TransferConfig = TransferConfig()
 
 
-class EnvSettings(BaseSettings):
-    """Raw environment loader. We then map to Settings."""
-
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    POSTGRES_SERVER: str
-    POSTGRES_PORT: int = 5432
-    POSTGRES_DB: str
-    POSTGRES_USERNAME: str
-    POSTGRES_PASSWORD: str
-    POSTGRES_SCHEMA: str = "public"
-
-    MONGO_URI: str
-    MONGO_DB: str
-    MONGO_USERNAME: str = ""
-    MONGO_PASSWORD: str = ""
-
-
 def load_settings(config_path: Optional[str]) -> Settings:
     """
-    Load settings from db.toml if provided, else from environment.
-    If config_path is provided, .env / env vars are ignored.
+    Load settings from ``db.toml``.
+
+    Uses ``config_path`` when provided (``-c`` flag), otherwise auto-discovers
+    ``db.toml`` in the current directory or the pg2mongo project root.
     """
-    if config_path:
-        with open(config_path, "rb") as f:
-            data = tomllib.load(f)
+    path = resolve_config_path(config_path)
 
-        pg_data = data.get("postgres", {})
-        mongo_data = data.get("mongo", {})
-        transfer_data = data.get("transfer", {})
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
 
-        pg = PostgresConfig(**pg_data)
-        mongo = MongoConfig(**mongo_data)
-        transfer = TransferConfig(**transfer_data)
+    pg_data = data.get("postgres", {})
+    mongo_data = data.get("mongo", {})
+    transfer_data = data.get("transfer", {})
 
-        return Settings(postgres=pg, mongo=mongo, transfer=transfer)
-
-    # Environment-based
-    env = EnvSettings()
-
-    pg = PostgresConfig(
-        server=env.POSTGRES_SERVER,
-        port=env.POSTGRES_PORT,
-        db=env.POSTGRES_DB,
-        username=env.POSTGRES_USERNAME,
-        password=env.POSTGRES_PASSWORD,
-        schema_name=env.POSTGRES_SCHEMA,
-    )
-
-    mongo = MongoConfig(
-        uri=env.MONGO_URI,
-        db=env.MONGO_DB,
-        username=env.MONGO_USERNAME,
-        password=env.MONGO_PASSWORD,
-    )
-
-    transfer = TransferConfig()
+    pg = PostgresConfig(**pg_data)
+    mongo = MongoConfig(**mongo_data)
+    transfer = TransferConfig(**transfer_data)
 
     return Settings(postgres=pg, mongo=mongo, transfer=transfer)
