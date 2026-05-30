@@ -13,6 +13,15 @@ from pg2mongo.builders.invoice_detail_build import (
     add_invoice_details,
     load_invoice_details,
 )
+from pg2mongo.builders.journal_sync import (
+    load_journals_by_invoice,
+    upsert_invoice_journals,
+)
+from pg2mongo.builders.income_statement_sync import (
+    collect_income_statement_ids_from_journals,
+    sync_income_statements_by_ids,
+    sync_income_statements_in_window,
+)
 from pg2mongo.transfer.common import (
     resolve_settings_from_ctx,
     connect_postgres_and_mongo,
@@ -138,6 +147,7 @@ def invoice_cmd(
          - Load invoiceDetail + barcode rows from Postgres.
          - Insert invoice details into their collection.
          - Update invoice document with detail reference IDs.
+         - Upsert journal entries into the journals collection.
       3. If any step fails, the transaction rolls back and the invoice is NOT created.
 
     This guarantees a COMPLETE invoice (header + details + barcodes)
@@ -177,6 +187,39 @@ def invoice_cmd(
         )
         progress.announce()
 
+        journals_by_invoice = load_journals_by_invoice(
+            pg_conn, start_iso, end_iso, verbose=verbose
+        )
+
+        if not dry_run:
+            sync_income_statements_in_window(
+                pg_conn,
+                mongo_client,
+                mongo_db_name,
+                start_iso,
+                end_iso,
+                verbose=verbose,
+            )
+            journal_stmt_ids = collect_income_statement_ids_from_journals(
+                journals_by_invoice
+            )
+            sync_income_statements_by_ids(
+                pg_conn,
+                mongo_client,
+                mongo_db_name,
+                journal_stmt_ids,
+                verbose=verbose,
+            )
+        elif verbose:
+            journal_stmt_ids = collect_income_statement_ids_from_journals(
+                journals_by_invoice
+            )
+            click.secho(
+                f"[dry-run] Would sync income_statements in date window and "
+                f"{len(journal_stmt_ids)} referenced by journals",
+                fg="yellow",
+            )
+
         with progress:
             with pg_conn.cursor() as cur:
                 cur.execute(INVOICE_SELECT_SQL, (start_iso, end_iso))
@@ -198,6 +241,7 @@ def invoice_cmd(
                         dry_run=dry_run,
                         verbose=verbose,
                         progress=progress,
+                        journals_by_invoice=journals_by_invoice,
                     )
 
         click.secho(
@@ -219,6 +263,7 @@ def _process_single_invoice(
     dry_run: bool,
     verbose: bool,
     progress: TransferProgress,
+    journals_by_invoice: dict[int, list],
 ):
     """
     Handles the full ingestion of a single invoice:
@@ -241,6 +286,8 @@ def _process_single_invoice(
         progress.secho("invoice missing oldID; skipping", fg="yellow")
         return
 
+    journal_docs = journals_by_invoice.get(int(old_id), [])
+
     doc["updatedAt"] = datetime.now(timezone.utc)
 
     if dry_run:
@@ -256,6 +303,11 @@ def _process_single_invoice(
             progress.secho(
                 f"[dry-run] Would insert {detail_count} doc(s) into "
                 f"{cols.INVOICE_DETAILS}, barcodes={barcode_count}",
+                fg="yellow",
+            )
+            progress.secho(
+                f"[dry-run] Would upsert {len(journal_docs)} journal(s) into "
+                f"{cols.JOURNALS}",
                 fg="yellow",
             )
         return
@@ -305,11 +357,21 @@ def _process_single_invoice(
                 verbose=verbose,
             )
 
+            upsert_invoice_journals(
+                mongo_client,
+                mongo_db_name,
+                invoice_id,
+                journal_docs,
+                session=sess,
+                verbose=verbose,
+            )
+
         try:
             session.with_transaction(txn_ops)
             if verbose:
                 progress.secho(
-                    f"[ok] Invoice oldID={old_id} fully committed (header + details)",
+                    f"[ok] Invoice oldID={old_id} fully committed "
+                    f"(header + details + {len(journal_docs)} journal(s))",
                     fg="green",
                 )
         except PyMongoError as exc:

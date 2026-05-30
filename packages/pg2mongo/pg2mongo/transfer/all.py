@@ -12,6 +12,7 @@ from pg2mongo.transfer.container import container_cmd
 from pg2mongo.transfer.customer import customer_cmd
 from pg2mongo.transfer.delivery import delivery_cmd
 from pg2mongo.transfer.employee import employee_cmd
+from pg2mongo.transfer.income_statement import income_statement_cmd
 from pg2mongo.transfer.invoice import invoice_cmd
 from pg2mongo.transfer.pickup import pickup_cmd
 from pg2mongo.transfer.user import user_cmd
@@ -77,6 +78,14 @@ def _build_invoke_kwargs(
             "dry_run": dry_run,
         }
 
+    if entity == "income-statement":
+        return {
+            "start_date": start_date,
+            "end_date": end_date,
+            "dry_run": dry_run,
+            "limit": limit,
+        }
+
     if entity == "invoice":
         return {
             "start_date": start_date,
@@ -107,6 +116,7 @@ TRANSFER_STEPS: list[tuple[str, click.Command]] = [
     ("user", user_cmd),
     ("customer", customer_cmd),
     ("container", container_cmd),
+    ("income-statement", income_statement_cmd),
     ("invoice", invoice_cmd),
     ("pickup", pickup_cmd),
     ("delivery", delivery_cmd),

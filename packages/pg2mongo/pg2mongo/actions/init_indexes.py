@@ -75,6 +75,9 @@ def init_indexes_cmd(ctx: click.Context):
         # Invoices
         create_unique_index(db, cols.INVOICES, {"number": 1})
 
+        # Journals (natural key from Postgres general_journal.id)
+        create_unique_index(db, cols.JOURNALS, {"oldID": 1})
+
         # Users
         create_unique_index(db, cols.USERS, {"userName": 1, "roles": 1})
 

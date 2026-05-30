@@ -14,7 +14,8 @@ clean, incremental, and developer-friendly way.
 | `transfer container` | `container` | `containers` |
 | `transfer delivery` | `vwdelivery_api` | `deliveries` |
 | `transfer employee` | `employee` | `employees` |
-| `transfer invoice` | `vwinvoice_api` + `vwinvoice_details_api` | `invoices`, `invoice_details` |
+| `transfer income-statement` | `income_statement` | `income_statements` |
+| `transfer invoice` | `vwinvoice_api` + `vwinvoice_details_api` + journals | `invoices`, `invoice_details`, `journals` |
 | `transfer pickup` | `vwpickup_api` | `pickups` |
 | `transfer user` | `auth_user` + `user_profile` | `users` |
 
@@ -219,7 +220,7 @@ If `db.toml` is in the current directory (or pg2mongo project root), `-c` is opt
 
 Run every entity in dependency order:
 
-**branch → employee → user → customer → container → invoice → pickup → delivery**
+**branch → employee → user → customer → container → income-statement → invoice → pickup → delivery**
 
 #### Examples
 
@@ -330,9 +331,13 @@ pg2mongo -c db.toml transfer customer
 
 ### Invoices
 
-Invoices are synced inside a **MongoDB transaction** per invoice (header + line items + barcodes).
+Invoices are synced inside a **MongoDB transaction** per invoice (header + line items + barcodes + **journal entries**).
 
 Before processing, a `COUNT` query reports how many invoices match the date window (e.g. `Invoices: 150 of 7,280 record(s) to process`). During the run you get a progress bar with position, percent, and ETA; with `-v`, each line is prefixed with `[current/total] (pct%)`.
+
+Journal entries are loaded from `vwgeneral_journal` (grouped by `invoice_id`) using the same invoice date window (`inv.time_modified`), filtered by `transaction_type_id IN (2,3,4,8)` and `account_chart_id != 19`, then upserted into `journals` by `oldID` inside the invoice transaction.
+
+Full **income statement** rows are upserted from Postgres `income_statement` into `income_statements` (numeric `_id` = Postgres `id`) before invoices run, including any statements referenced by journals. Run `pg2mongo transfer income-statement` separately for a date-window backfill.
 
 ```bash
 pg2mongo -c db.toml transfer invoice --start-date 2022-01-01

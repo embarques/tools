@@ -14,6 +14,7 @@ from pg2mongo.transfer.employee import employee_cmd
 from pg2mongo.transfer.user import user_cmd
 from pg2mongo.transfer.delivery import delivery_cmd
 from pg2mongo.transfer.branch import branch_cmd
+from pg2mongo.transfer.income_statement import income_statement_cmd
 from pg2mongo.transfer.all import all_cmd
 
 
@@ -62,14 +63,15 @@ def transfer_group(ctx: click.Context):
 
 
 # Transfer subcommands
-transfer_group.add_command(customer_cmd, name="customer")
-transfer_group.add_command(invoice_cmd, name="invoice")
-transfer_group.add_command(pickup_cmd, name="pickup")
-transfer_group.add_command(container_cmd, name="container")
+transfer_group.add_command(branch_cmd, name="branch")
 transfer_group.add_command(employee_cmd, name="employee")
 transfer_group.add_command(user_cmd, name="user")
+transfer_group.add_command(customer_cmd, name="customer")
+transfer_group.add_command(container_cmd, name="container")
+transfer_group.add_command(income_statement_cmd, name="income-statement")
+transfer_group.add_command(invoice_cmd, name="invoice")
+transfer_group.add_command(pickup_cmd, name="pickup")
 transfer_group.add_command(delivery_cmd, name="delivery")
-transfer_group.add_command(branch_cmd, name="branch")
 transfer_group.add_command(all_cmd, name="all")
 
 
