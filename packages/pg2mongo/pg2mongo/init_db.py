@@ -13,7 +13,7 @@ from pymongo.errors import (
 )
 
 from pg2mongo.admin import ensure_business_indexes, seed_counters
-from pg2mongo.cli.context import get_config_path, get_verbose
+from pg2mongo.cli.context import get_config_path, resolve_verbose, verbose_option
 from pg2mongo.clients import connect_mongo
 from pg2mongo.mongo_uri import redact_mongo_uri
 from pg2mongo.transfer.common import resolve_settings
@@ -22,15 +22,17 @@ from pg2mongo.transfer.common import resolve_settings
 @click.command("init-db")
 @click.option("--drop-existing", is_flag=True, help="Drop and recreate indexes.")
 @click.option("--dry-run", is_flag=True, help="Preview without making changes.")
+@verbose_option
 @click.pass_context
 def init_db_cmd(
     ctx: click.Context,
     drop_existing: bool,
     dry_run: bool,
+    verbose: bool,
 ) -> None:
     """Initialize MongoDB: ensure indexes and seed counters (idempotent)."""
+    verbose = resolve_verbose(ctx, verbose)
     config_path = get_config_path(ctx)
-    verbose = get_verbose(ctx)
     settings = resolve_settings(config_path, verbose)
 
     mongo_client = None

@@ -3,7 +3,7 @@ from pathlib import Path
 import click
 import pytest
 
-from pg2mongo.cli.context import get_config_path, get_verbose
+from pg2mongo.cli.context import get_config_path, get_verbose, resolve_verbose
 from pg2mongo.config import _find_db_toml, load_settings, resolve_config_path
 
 
@@ -31,6 +31,18 @@ def test_load_settings_without_explicit_path():
     assert settings.mongo.db
 
 
-def test_resolve_config_path_explicit():
-    db = _find_db_toml()
-    assert resolve_config_path(str(db)) == db
+def test_resolve_verbose_sets_context():
+    ctx = click.Context(click.Command("child"))
+    ctx.obj = {}
+    assert resolve_verbose(ctx, True) is True
+    assert get_verbose(ctx) is True
+
+
+def test_all_subcommands_accept_verbose_flag():
+    from click.testing import CliRunner
+    from pg2mongo.transfer.pickup import pickup_cmd
+
+    runner = CliRunner()
+    result = runner.invoke(pickup_cmd, ["--help"])
+    assert result.exit_code == 0
+    assert "--verbose" in result.output

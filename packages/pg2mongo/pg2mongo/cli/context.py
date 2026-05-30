@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from typing import Callable, TypeVar
+
 import click
+
+F = TypeVar("F", bound=Callable[..., object])
 
 
 def get_config_path(ctx: click.Context) -> str | None:
@@ -15,18 +19,29 @@ def get_config_path(ctx: click.Context) -> str | None:
     return None
 
 
-def get_verbose(ctx: click.Context, *, local: bool = False) -> bool:
-    """
-    Return whether verbose mode is enabled.
-
-    *local* — when True, only check the current context (e.g. invoice ``-v`` flag
-    is handled separately by the caller).
-    """
-    current: click.Context | None = ctx if local else ctx
+def get_verbose(ctx: click.Context) -> bool:
+    """Return whether verbose mode is enabled anywhere in the Click context chain."""
+    current: click.Context | None = ctx
     while current is not None:
         if current.obj and current.obj.get("verbose"):
             return True
-        if local:
-            break
         current = current.parent
     return False
+
+
+def resolve_verbose(ctx: click.Context, verbose: bool) -> bool:
+    """Apply a command-level ``-v`` flag and return the effective verbose state."""
+    if verbose:
+        ctx.ensure_object(dict)
+        ctx.obj["verbose"] = True
+    return get_verbose(ctx)
+
+
+def verbose_option(func: F) -> F:
+    """Click decorator: add ``-v / --verbose`` to a command."""
+    return click.option(
+        "-v",
+        "--verbose",
+        is_flag=True,
+        help="Enable verbose output.",
+    )(func)

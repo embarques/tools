@@ -8,6 +8,7 @@ from pymongo import UpdateOne
 from rich.console import Console
 
 from pg2mongo import collections as cols
+from pg2mongo.sequences import ensure_counters
 
 console = Console()
 
@@ -54,22 +55,6 @@ def ensure_business_indexes(db: Database, *, drop_existing: bool = False) -> Non
 
 
 def seed_counters(db: Database) -> None:
-    counters = [
-        ("user_id", 0),
-        ("container_id", 0),
-        ("chart_account_id", 0),
-        ("income_statement_id", 0),
-        ("app_menu_id", 0),
-        ("permission_id", 0),
-        ("role_id", 0),
-        ("invoice_description_id", 0),
-        ("city_id", 0),
-        ("pickup_id", 0),
-        ("employee_id", 0),
-        ("delivery_id", 0),
-    ]
-    coll = _create_collection_if_missing(db, cols.COUNTERS)
-    ops = [UpdateOne({"_id": cid}, {"$setOnInsert": {"_id": cid, "sequenceValue": seq}}, upsert=True) for cid, seq in counters]
-    if ops:
-        res = coll.bulk_write(ops, ordered=False)
-        console.print(f"[green]Counters ensured[/green] (upserted: {getattr(res, 'upserted_count', 0)})")
+    _create_collection_if_missing(db, cols.COUNTERS)
+    created = ensure_counters(db)
+    console.print(f"[green]Counters ensured[/green] (new: {created})")

@@ -6,23 +6,25 @@ import click
 from pymongo.errors import PyMongoError
 
 from pg2mongo import collections as cols
-from pg2mongo.cli.context import get_config_path, get_verbose
+from pg2mongo.cli.context import get_config_path, resolve_verbose, verbose_option
 from pg2mongo.transfer.common import (
     resolve_settings,
     connect_postgres_and_mongo,
     close_connections_safe,
 )
-from pg2mongo.utils import create_unique_index  # ← now from utils
+from pg2mongo.utils import create_unique_index
+from pg2mongo.sequences import ensure_counters
 
 
 @click.command("init-indexes")
+@verbose_option
 @click.pass_context
-def init_indexes_cmd(ctx: click.Context):
+def init_indexes_cmd(ctx: click.Context, verbose: bool):
     """
     Initialize Mongo indexes and seed counters collection.
     """
+    verbose = resolve_verbose(ctx, verbose)
     config_path = get_config_path(ctx)
-    verbose = get_verbose(ctx)
 
     settings = resolve_settings(config_path, verbose)
     pg_conn = None
@@ -34,30 +36,9 @@ def init_indexes_cmd(ctx: click.Context):
 
         click.secho(f"Initializing counters on db={settings.mongo.db}", fg="cyan")
 
-        # Seed counters
-        counters_coll = db[cols.COUNTERS]
-
-        counters = [
-            {"_id": "user_id", "sequenceValue": 0},
-            {"_id": "container_id", "sequenceValue": 0},
-            {"_id": "chart_account_id", "sequenceValue": 0},
-            {"_id": "income_statement_id", "sequenceValue": 0},
-            {"_id": "app_menu_id", "sequenceValue": 0},
-            {"_id": "permission_id", "sequenceValue": 0},
-            {"_id": "role_id", "sequenceValue": 0},
-            {"_id": "invoice_description_id", "sequenceValue": 0},
-            {"_id": "city_id", "sequenceValue": 0},
-            {"_id": "pickup_id", "sequenceValue": 0},
-            {"_id": "employee_id", "sequenceValue": 0},
-            {"_id": "delivery_id", "sequenceValue": 0},
-        ]
-
-        for c in counters:
-            counters_coll.update_one(
-                {"_id": c["_id"]},
-                {"$setOnInsert": c},
-                upsert=True,
-            )
+        created = ensure_counters(db)
+        if verbose and created:
+            click.secho(f"[counters] Created {created} new counter(s)", fg="cyan")
 
         # Touch collections that should exist without indexes
         for name in (cols.ACTIVITY_LOGS, cols.INVOICE_DETAILS, cols.JOURNALS):

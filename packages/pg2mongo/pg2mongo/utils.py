@@ -7,7 +7,6 @@ from typing import Any, Mapping, Optional, Sequence
 from pg2mongo import collections as cols
 
 from pymongo.database import Database
-from pymongo import ReturnDocument
 
 
 def to_utc(value: Any | None) -> Optional[datetime]:
@@ -85,27 +84,4 @@ def create_unique_index(database: Database, collection_name: str, keys: dict) ->
     coll.create_index(list(keys.items()), unique=True)
 
 
-def get_next_sequence(
-    database: Database,
-    sequence_name: str,
-    session=None,
-) -> int:
-    """
-    Uses the `counters` collection to get the next sequence number.
-
-    Expected document shape in `counters`:
-      { _id: "pickup_id", sequenceValue: <int> }
-
-    Raises:
-      RuntimeError if the counter document is missing.
-    """
-    coll = database[cols.COUNTERS]
-    doc = coll.find_one_and_update(
-        {"_id": sequence_name},
-        {"$inc": {"sequenceValue": 1}},
-        return_document=ReturnDocument.AFTER,
-        session=session,
-    )
-    if not doc:
-        raise RuntimeError(f"Counter '{sequence_name}' not found in 'counters' collection")
-    return int(doc["sequenceValue"])
+from pg2mongo.sequences import get_next_sequence  # noqa: F401 — re-export

@@ -5,7 +5,7 @@ from typing import Optional
 import click
 
 from pg2mongo import collections as cols
-from pg2mongo.cli.context import get_verbose
+from pg2mongo.cli.context import resolve_verbose, verbose_option
 from pg2mongo.mongo import get_collection
 from pg2mongo.builders.income_statement_sync import (
     INCOME_STATEMENT_COUNT_SQL,
@@ -40,6 +40,7 @@ from pg2mongo.transfer.progress import TransferProgress, count_sql_rows
     default=0,
     help="Limit number of records processed (0 = no limit).",
 )
+@verbose_option
 @click.pass_context
 def income_statement_cmd(
     ctx: click.Context,
@@ -47,10 +48,11 @@ def income_statement_cmd(
     end_date: Optional[str],
     dry_run: bool,
     limit: int,
+    verbose: bool,
 ):
     """Transfer income statements from Postgres ``income_statement`` to MongoDB."""
-    verbose = get_verbose(ctx)
-    settings = resolve_settings_from_ctx(ctx)
+    verbose = resolve_verbose(ctx, verbose)
+    settings = resolve_settings_from_ctx(ctx, verbose=verbose)
     pg_conn = None
     mongo_client = None
 

@@ -9,7 +9,7 @@ from pymongo import UpdateOne
 from pg2mongo.builders.container_build import build_container_doc
 from pg2mongo import collections as cols
 from pg2mongo.clients import connect_postgres, connect_mongo
-from pg2mongo.cli.context import get_verbose
+from pg2mongo.cli.context import resolve_verbose, verbose_option
 from pg2mongo.transfer.common import resolve_settings_from_ctx, close_connections_safe
 
 
@@ -147,6 +147,7 @@ def _determine_date_window_for_containers(
     is_flag=True,
     help="Preview actions without writing to Mongo.",
 )
+@verbose_option
 @click.pass_context
 def container_cmd(
     ctx: click.Context,
@@ -154,12 +155,13 @@ def container_cmd(
     end_date: Optional[str],
     limit: Optional[int],
     dry_run: bool,
+    verbose: bool,
 ):
     """
     Transfer container records from Postgres → MongoDB (containers collection).
     """
-    verbose = get_verbose(ctx)
-    settings = resolve_settings_from_ctx(ctx)
+    verbose = resolve_verbose(ctx, verbose)
+    settings = resolve_settings_from_ctx(ctx, verbose=verbose)
 
     pg_conn = None
     mongo_client = None

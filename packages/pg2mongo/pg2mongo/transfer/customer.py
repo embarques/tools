@@ -6,7 +6,7 @@ import click
 from pymongo.errors import PyMongoError
 
 from pg2mongo import collections as cols
-from pg2mongo.cli.context import get_verbose
+from pg2mongo.cli.context import resolve_verbose, verbose_option
 from pg2mongo.transfer.common import (
     resolve_settings_from_ctx,
     connect_postgres_and_mongo,
@@ -39,6 +39,7 @@ _BATCH_SIZE = 500
     default=0,
     help="Limit number of records processed (0 = no limit).",
 )
+@verbose_option
 @click.pass_context
 def customer_cmd(
     ctx: click.Context,
@@ -46,12 +47,13 @@ def customer_cmd(
     end_date: Optional[str],
     dry_run: bool,
     limit: int,
+    verbose: bool,
 ):
     """
     Transfer customers from Postgres vwcustomer_api to Mongo customers collection.
     """
-    verbose = get_verbose(ctx)
-    settings = resolve_settings_from_ctx(ctx)
+    verbose = resolve_verbose(ctx, verbose)
+    settings = resolve_settings_from_ctx(ctx, verbose=verbose)
     pg_conn = None
     mongo_client = None
 

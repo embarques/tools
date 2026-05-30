@@ -63,3 +63,26 @@ def build_pickup_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         )
 
     return doc
+
+
+def format_pickup_date(value) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "strftime"):
+        return value.strftime("%Y-%m-%d")
+    return str(value)
+
+
+def format_pickup_verbose(doc: dict, *, action: str) -> str:
+    """One-line summary for verbose pickup transfer output."""
+    pickup_id = doc.get("_id", doc.get("oldID"))
+    sender = doc.get("sender") or {}
+    address = sender.get("address") or {}
+    name = sender.get("name") or ""
+    phone = sender.get("phone1") or ""
+    city = address.get("city") or ""
+    date_str = format_pickup_date(doc.get("date"))
+    return (
+        f"[pickup] {action} id={pickup_id} name={name} "
+        f"tel={phone} city={city} date={date_str}"
+    )

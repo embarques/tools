@@ -29,6 +29,7 @@ from pg2mongo.transfer.common import (
     close_connections_safe,
 )
 from pg2mongo.transfer.progress import TransferProgress, count_sql_rows
+from pg2mongo.cli.context import resolve_verbose, verbose_option
 
 
 INVOICE_COUNT_SQL = """
@@ -122,12 +123,7 @@ ORDER BY v.invoice_date ASC
     default=0,
     help="Limit number of records processed (0 = no limit).",
 )
-@click.option(
-    "-v",
-    "--verbose",
-    is_flag=True,
-    help="Enable verbose output.",
-)
+@verbose_option
 @click.pass_context
 def invoice_cmd(
     ctx: click.Context,
@@ -154,6 +150,7 @@ def invoice_cmd(
     is always recorded in MongoDB, never a partial document.
     """
 
+    verbose = resolve_verbose(ctx, verbose)
     settings = resolve_settings_from_ctx(ctx, verbose=verbose)
 
     pg_conn = None

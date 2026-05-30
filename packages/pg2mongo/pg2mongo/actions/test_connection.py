@@ -3,7 +3,7 @@ from __future__ import annotations
 import click
 from pymongo.errors import PyMongoError
 
-from pg2mongo.cli.context import get_config_path
+from pg2mongo.cli.context import get_config_path, resolve_verbose, verbose_option
 from pg2mongo.transfer.common import (
     resolve_settings,
     close_connections_safe,
@@ -12,16 +12,17 @@ from pg2mongo.clients import connect_postgres, connect_mongo
 
 
 @click.command("test-connection")
+@verbose_option
 @click.pass_context
-def test_connection_cmd(ctx: click.Context):
+def test_connection_cmd(ctx: click.Context, verbose: bool):
     """
     Test and validate connection to Postgres and MongoDB.
     Prints connection status and database names.
     """
+    verbose = resolve_verbose(ctx, verbose)
     config_path = get_config_path(ctx)
 
-    # For this command we want clear output; we don't need noisy internals.
-    settings = resolve_settings(config_path, verbose=True)
+    settings = resolve_settings(config_path, verbose)
 
     pg_conn = None
     mongo_client = None

@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import click
 
-from pg2mongo.cli.context import get_verbose
+from pg2mongo.cli.context import resolve_verbose, verbose_option
 from pg2mongo.dates import parse_user_date
 from pg2mongo.transfer.branch import branch_cmd
 from pg2mongo.transfer.container import container_cmd
@@ -58,16 +58,17 @@ def _build_invoke_kwargs(
     verbose: bool,
 ) -> dict[str, Any]:
     optional_limit = _limit_for_optional(limit)
+    base = {"dry_run": dry_run, "verbose": verbose}
 
     if entity in {"branch", "employee", "user"}:
-        return {"limit": optional_limit, "dry_run": dry_run}
+        return {"limit": optional_limit, **base}
 
-    if entity in {"customer", "pickup"}:
+    if entity in {"customer", "pickup", "income-statement", "invoice"}:
         return {
             "start_date": start_date,
             "end_date": end_date,
-            "dry_run": dry_run,
             "limit": limit,
+            **base,
         }
 
     if entity == "container":
@@ -75,32 +76,15 @@ def _build_invoke_kwargs(
             "start_date": start_date,
             "end_date": end_date,
             "limit": optional_limit,
-            "dry_run": dry_run,
-        }
-
-    if entity == "income-statement":
-        return {
-            "start_date": start_date,
-            "end_date": end_date,
-            "dry_run": dry_run,
-            "limit": limit,
-        }
-
-    if entity == "invoice":
-        return {
-            "start_date": start_date,
-            "end_date": end_date,
-            "dry_run": dry_run,
-            "limit": limit,
-            "verbose": verbose,
+            **base,
         }
 
     if entity == "delivery":
         start_year, end_year = _delivery_year_range(start_date, end_date)
         kwargs: dict[str, Any] = {
             "start_year": start_year,
-            "dry_run": dry_run,
             "limit": optional_limit,
+            **base,
         }
         if end_year is not None:
             kwargs["end_year"] = end_year
@@ -143,12 +127,7 @@ TRANSFER_STEPS: list[tuple[str, click.Command]] = [
     default=0,
     help="Limit records per entity (0 = no limit).",
 )
-@click.option(
-    "-v",
-    "--verbose",
-    is_flag=True,
-    help="Enable verbose output (per-record progress; especially useful for invoice).",
-)
+@verbose_option
 @click.pass_context
 def all_cmd(
     ctx: click.Context,
@@ -165,10 +144,7 @@ def all_cmd(
     start/end date window as individual transfer commands. Deliveries map the
     date range to start/end years.     Branch, employee, and user always run a full sync.
     """
-    if verbose:
-        ctx.ensure_object(dict)
-        ctx.obj["verbose"] = True
-    verbose = get_verbose(ctx)
+    verbose = resolve_verbose(ctx, verbose)
     failed: list[str] = []
 
     click.secho("Starting full transfer (all entities)", fg="cyan", bold=True)

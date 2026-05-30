@@ -7,15 +7,16 @@ from pymongo import UpdateOne
 from pymongo.errors import PyMongoError
 
 from pg2mongo import collections as cols
-from pg2mongo.cli.context import get_verbose
+from pg2mongo.cli.context import resolve_verbose, verbose_option
 from pg2mongo.transfer.common import (
     resolve_settings_from_ctx,
     connect_postgres_and_mongo,
     get_date_window,
     close_connections_safe,
 )
-from pg2mongo.builders.pickup_build import build_pickup_doc
-from pg2mongo.utils import get_next_sequence  # ← moved here
+from pg2mongo.builders.pickup_build import build_pickup_doc, format_pickup_verbose
+from pg2mongo.sequences import ensure_counters
+from pg2mongo.utils import get_next_sequence
 
 
 _BATCH_SIZE = 200
@@ -41,6 +42,7 @@ _BATCH_SIZE = 200
     default=0,
     help="Limit number of records processed (0 = no limit).",
 )
+@verbose_option
 @click.pass_context
 def pickup_cmd(
     ctx: click.Context,
@@ -48,12 +50,13 @@ def pickup_cmd(
     end_date: Optional[str],
     dry_run: bool,
     limit: int,
+    verbose: bool,
 ):
     """
     Transfer pickups from Postgres vwpickup_api to Mongo pickups collection.
     """
-    verbose = get_verbose(ctx)
-    settings = resolve_settings_from_ctx(ctx)
+    verbose = resolve_verbose(ctx, verbose)
+    settings = resolve_settings_from_ctx(ctx, verbose=verbose)
     pg_conn = None
     mongo_client = None
 
@@ -118,6 +121,8 @@ def pickup_cmd(
 
         db = mongo_client[settings.mongo.db]
         coll = db[cols.PICKUPS]
+        ensure_counters(db)
+
         processed = 0
         batch_docs = []
 
@@ -133,11 +138,15 @@ def pickup_cmd(
                 batch_docs.append(doc)
 
                 if len(batch_docs) >= _BATCH_SIZE:
-                    _flush_pickup_batch(db, coll, batch_docs, dry_run, processed)
+                    _flush_pickup_batch(
+                        db, coll, batch_docs, dry_run, processed, verbose=verbose
+                    )
                     batch_docs.clear()
 
         if batch_docs:
-            _flush_pickup_batch(db, coll, batch_docs, dry_run, processed)
+            _flush_pickup_batch(
+                db, coll, batch_docs, dry_run, processed, verbose=verbose
+            )
             batch_docs.clear()
 
         click.secho(
@@ -149,15 +158,35 @@ def pickup_cmd(
         close_connections_safe(pg_conn, mongo_client)
 
 
-def _flush_pickup_batch(db, coll, docs, dry_run: bool, processed: int):
+def _flush_pickup_batch(
+    db,
+    coll,
+    docs,
+    dry_run: bool,
+    processed: int,
+    *,
+    verbose: bool = False,
+):
     if dry_run:
-        click.secho(
-            f"[dry-run] Would upsert {len(docs)} pickups (processed so far: {processed})",
-            fg="yellow",
-        )
+        if verbose:
+            for doc in docs:
+                old_id = doc.get("oldID")
+                exists = (
+                    coll.find_one({"oldID": old_id}, {"_id": 1}) is not None
+                    if old_id is not None
+                    else False
+                )
+                action = "would update" if exists else "would new"
+                click.secho(format_pickup_verbose(doc, action=action), fg="yellow")
+        else:
+            click.secho(
+                f"[dry-run] Would upsert {len(docs)} pickups (processed so far: {processed})",
+                fg="yellow",
+            )
         return
 
     requests = []
+    pending: list[dict] = []
     from datetime import datetime, timezone
 
     for doc in docs:
@@ -166,17 +195,22 @@ def _flush_pickup_batch(db, coll, docs, dry_run: bool, processed: int):
             click.secho("[warn] pickup missing oldID; skipping", fg="yellow")
             continue
 
-        # Assign numeric _id via counters
-        try:
-            doc["_id"] = get_next_sequence(db, "pickup_id")
-        except Exception as exc:
-            click.secho(
-                f"❌ Failed to get next pickup_id for oldID={old_id}: {exc}",
-                fg="red",
-            )
-            continue
+        # Keep existing Mongo _id on re-sync; assign via counter only for new pickups
+        existing = coll.find_one({"oldID": old_id}, {"_id": 1})
+        if existing:
+            doc["_id"] = existing["_id"]
+        else:
+            try:
+                doc["_id"] = get_next_sequence(db, "pickup_id")
+            except Exception as exc:
+                click.secho(
+                    f"❌ Failed to get next pickup_id for oldID={old_id}: {exc}",
+                    fg="red",
+                )
+                continue
 
         doc["updatedAt"] = datetime.now(timezone.utc)
+        pending.append(doc)
 
         requests.append(
             UpdateOne(
@@ -191,11 +225,26 @@ def _flush_pickup_batch(db, coll, docs, dry_run: bool, processed: int):
 
     try:
         result = coll.bulk_write(requests, ordered=False)
-        click.secho(
-            f"[batch] pickups upserted={result.upserted_count} "
-            f"matched={result.matched_count} modified={result.modified_count}",
-            fg="blue",
-        )
+        if verbose:
+            upserted_indices = set(result.upserted_ids or {})
+            for i, doc in enumerate(pending):
+                action = "new" if i in upserted_indices else "updated"
+                click.secho(
+                    format_pickup_verbose(doc, action=action),
+                    fg="green" if action == "new" else "blue",
+                )
+            click.secho(
+                f"[batch] new={result.upserted_count} "
+                f"updated={result.matched_count} "
+                f"modified={result.modified_count}",
+                fg="cyan",
+            )
+        else:
+            click.secho(
+                f"[batch] pickups upserted={result.upserted_count} "
+                f"matched={result.matched_count} modified={result.modified_count}",
+                fg="blue",
+            )
     except PyMongoError as exc:
         click.secho("❌ Error during pickup bulk_write:", fg="red", bold=True)
         click.secho(str(exc), fg="red")
