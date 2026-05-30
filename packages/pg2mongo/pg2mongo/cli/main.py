@@ -8,11 +8,13 @@ from pg2mongo.transfer.invoice import invoice_cmd
 from pg2mongo.transfer.pickup import pickup_cmd
 from pg2mongo.actions.init_indexes import init_indexes_cmd
 from pg2mongo.actions.test_connection import test_connection_cmd
+from pg2mongo.init_db import init_db_cmd
 from pg2mongo.transfer.container import container_cmd
 from pg2mongo.transfer.employee import employee_cmd
 from pg2mongo.transfer.user import user_cmd
 from pg2mongo.transfer.delivery import delivery_cmd
 from pg2mongo.transfer.branch import branch_cmd
+from pg2mongo.transfer.all import all_cmd
 
 
 
@@ -55,7 +57,7 @@ def version_cmd():
 @cli.group("transfer")
 @click.pass_context
 def transfer_group(ctx: click.Context):
-    """Transfer commands per entity (customer, invoice, pickup)."""
+    """Transfer commands per entity, or all at once."""
     pass
 
 
@@ -68,10 +70,12 @@ transfer_group.add_command(employee_cmd, name="employee")
 transfer_group.add_command(user_cmd, name="user")
 transfer_group.add_command(delivery_cmd, name="delivery")
 transfer_group.add_command(branch_cmd, name="branch")
+transfer_group.add_command(all_cmd, name="all")
 
 
 # Admin / utility
 cli.add_command(init_indexes_cmd, name="init-indexes")
+cli.add_command(init_db_cmd, name="init-db")
 cli.add_command(test_connection_cmd, name="test-connection")
 
 

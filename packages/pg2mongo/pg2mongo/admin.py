@@ -7,6 +7,8 @@ from pymongo.errors import CollectionInvalid
 from pymongo import UpdateOne
 from rich.console import Console
 
+from pg2mongo import collections as cols
+
 console = Console()
 
 
@@ -35,19 +37,19 @@ def create_unique_index(db: Database, collection_name: str, keys: List[Tuple[str
 
 
 def ensure_business_indexes(db: Database, *, drop_existing: bool = False) -> None:
-    create_unique_index(db, "branches", [("name", ASCENDING)], drop_existing=drop_existing)
-    create_unique_index(db, "customers", [("name", ASCENDING), ("phone1", ASCENDING)], drop_existing=drop_existing)
-    create_unique_index(db, "invoices", [("number", ASCENDING)], drop_existing=drop_existing)
-    create_unique_index(db, "users", [("userName", ASCENDING), ("roles", ASCENDING)], drop_existing=drop_existing)
-    create_unique_index(db, "containers", [("name", ASCENDING)], drop_existing=drop_existing)
-    create_unique_index(db, "accounts", [("name", ASCENDING)], drop_existing=drop_existing)
-    create_unique_index(db, "incomestatements", [("date", ASCENDING), ("branch.code", ASCENDING)], drop_existing=drop_existing)
-    create_unique_index(db, "roles", [("name", ASCENDING)], drop_existing=drop_existing)
-    create_unique_index(db, "permissions", [("name", ASCENDING)], drop_existing=drop_existing)
-    create_unique_index(db, "cities", [("name", ASCENDING)], drop_existing=drop_existing)
-    create_unique_index(db, "pickups", [("date", ASCENDING), ("sender.name", ASCENDING), ("sender.address.address1", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.BRANCHES, [("name", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.CUSTOMERS, [("name", ASCENDING), ("phone1", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.INVOICES, [("number", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.USERS, [("userName", ASCENDING), ("roles", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.CONTAINERS, [("name", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.ACCOUNTS, [("name", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.INCOME_STATEMENTS, [("date", ASCENDING), ("branch.code", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.ROLES, [("name", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.PERMISSIONS, [("name", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.CITIES, [("name", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.PICKUPS, [("date", ASCENDING), ("sender.name", ASCENDING), ("sender.address.address1", ASCENDING)], drop_existing=drop_existing)
 
-    for cname in ("activitylogs", "invoicedetails", "journals", "counters"):
+    for cname in (cols.ACTIVITY_LOGS, cols.INVOICE_DETAILS, cols.JOURNALS, cols.COUNTERS):
         _create_collection_if_missing(db, cname)
 
 
@@ -66,7 +68,7 @@ def seed_counters(db: Database) -> None:
         ("employee_id", 0),
         ("delivery_id", 0),
     ]
-    coll = _create_collection_if_missing(db, "counters")
+    coll = _create_collection_if_missing(db, cols.COUNTERS)
     ops = [UpdateOne({"_id": cid}, {"$setOnInsert": {"_id": cid, "sequenceValue": seq}}, upsert=True) for cid, seq in counters]
     if ops:
         res = coll.bulk_write(ops, ordered=False)

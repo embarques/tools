@@ -6,6 +6,7 @@ import click
 from pymongo import UpdateOne
 
 from pg2mongo.builders.branch_build import build_branch_doc
+from pg2mongo import collections as cols
 from pg2mongo.clients import connect_postgres, connect_mongo
 from pg2mongo.transfer.common import resolve_settings, close_connections_safe
 
@@ -67,7 +68,7 @@ def branch_cmd(
         mongo_client = connect_mongo(settings, verbose=verbose)
 
         db = mongo_client[settings.mongo.db]
-        coll = db["branches"]
+        coll = db[cols.BRANCHES]
 
         if verbose:
             click.secho("[branches] Executing Postgres query…", fg="cyan")

@@ -3,19 +3,22 @@ from __future__ import annotations
 from typing import Optional
 
 import click
-from pymongo import UpdateOne
+from datetime import datetime, timezone
 from pymongo.errors import PyMongoError
 
+from pg2mongo import collections as cols
+from pg2mongo.mongo import get_collection
+from pg2mongo.builders.invoice_build import build_invoice_doc
+from pg2mongo.builders.invoice_detail_build import (
+    add_invoice_details,
+    load_invoice_details,
+)
 from pg2mongo.transfer.common import (
     resolve_settings,
     connect_postgres_and_mongo,
     get_date_window,
     close_connections_safe,
 )
-from pg2mongo.builders.invoice_build import build_invoice_doc
-
-
-_BATCH_SIZE = 200
 
 
 @click.command("invoice")
@@ -38,6 +41,12 @@ _BATCH_SIZE = 200
     default=0,
     help="Limit number of records processed (0 = no limit).",
 )
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose output.",
+)
 @click.pass_context
 def invoice_cmd(
     ctx: click.Context,
@@ -45,30 +54,49 @@ def invoice_cmd(
     end_date: Optional[str],
     dry_run: bool,
     limit: int,
+    verbose: bool,
 ):
     """
-    Transfer invoices from Postgres vwinvoice_api to Mongo invoices collection.
-    (Header-focused; detail/journal logic can be extended as needed.)
-    """
-    config_path = ctx.obj.get("config_path")
-    verbose = ctx.obj.get("verbose", False)
+    Main CLI command to transfer invoices from Postgres -> MongoDB.
 
+    For each invoice:
+      1. Build invoice header object from Postgres row.
+      2. Within a MongoDB transaction:
+         - Upsert the invoice header.
+         - Load invoiceDetail + barcode rows from Postgres.
+         - Insert invoice details into their collection.
+         - Update invoice.invoiceDetails with inserted IDs.
+      3. If any step fails, the transaction rolls back and the invoice is NOT created.
+
+    This guarantees a COMPLETE invoice (header + details + barcodes)
+    is always recorded in MongoDB, never a partial document.
+    """
+
+    config_path = ctx.obj.get("config_path")
+    verbose = verbose or bool(ctx.obj.get("verbose", False))
     settings = resolve_settings(config_path, verbose)
+
     pg_conn = None
     mongo_client = None
 
     try:
+        # Establish connections to Postgres and MongoDB
         pg_conn, mongo_client = connect_postgres_and_mongo(settings, verbose)
 
+        mongo_db_name = settings.mongo.db
+
+        # MongoDB invoices collection
+        coll = get_collection(mongo_client, mongo_db_name, cols.INVOICES)
+
+        # Calculate time window to fetch invoices from Postgres
         start_iso, end_iso = get_date_window(
-            mongo_client,
-            settings,
-            start_date,
-            end_date,
-            verbose,
-            collection="invoices",
+            coll=coll,
+            start_date=start_date,
+            end_date=end_date,
+            verbose=verbose,
         )
 
+        # Query to pull invoice header information from Postgres
         sql = """
         SELECT id,
                number,
@@ -131,33 +159,32 @@ def invoice_cmd(
 
         if verbose:
             click.secho(
-                f"Running invoice query between {start_iso} and {end_iso}",
+                f"[query] Running invoice query between {start_iso} and {end_iso}",
                 fg="cyan",
             )
 
-        coll = mongo_client[settings.mongo.db]["invoices"]
-
         processed = 0
-        batch = []
 
+        # Execute invoice query
         with pg_conn.cursor() as cur:
             cur.execute(sql, (start_iso, end_iso))
 
+            # Process invoice rows one at a time
             for row in cur:
                 processed += 1
                 if limit and processed > limit:
                     break
 
-                doc = build_invoice_doc(row)
-                batch.append(doc)
-
-                if len(batch) >= _BATCH_SIZE:
-                    _flush_invoice_batch(coll, batch, dry_run, processed)
-                    batch.clear()
-
-        if batch:
-            _flush_invoice_batch(coll, batch, dry_run, processed)
-            batch.clear()
+                # Process this invoice: upsert header + insert details
+                _process_single_invoice(
+                    pg_conn=pg_conn,
+                    mongo_client=mongo_client,
+                    mongo_db_name=mongo_db_name,
+                    coll=coll,
+                    row=row,
+                    dry_run=dry_run,
+                    verbose=verbose,
+                )
 
         click.secho(
             f"✅ Invoice transfer complete. Processed={processed}, dry_run={dry_run}",
@@ -165,49 +192,144 @@ def invoice_cmd(
         )
 
     finally:
+        # Always close DB connections
         close_connections_safe(pg_conn, mongo_client)
 
 
-def _flush_invoice_batch(coll, batch, dry_run: bool, processed: int):
-    if dry_run:
+def _process_single_invoice(
+    pg_conn,
+    mongo_client,
+    mongo_db_name: str,
+    coll,
+    row,
+    dry_run: bool,
+    verbose: bool,
+):
+    """
+    Handles the full ingestion of a single invoice:
+       - Build invoice header
+       - Start MongoDB transaction
+       - Upsert invoice header
+       - Load invoice details + barcodes (from Postgres)
+       - Insert invoice details
+       - Update invoice with reference IDs
+       - Commit transaction
+
+    If any step fails, MongoDB automatically rolls back the entire invoice.
+    """
+
+    # Convert SQL row → invoice MongoDB document
+    doc = build_invoice_doc(row)
+    old_id = doc.get("oldID")
+    number = doc.get("number")
+
+    if old_id is None:
+        click.secho("[warn] invoice missing oldID; skipping", fg="yellow")
+        return
+
+    if verbose:
         click.secho(
-            f"[dry-run] Would upsert {len(batch)} invoices (processed so far: {processed})",
+            f"\n[invoice] Processing invoice oldID={old_id}, number={number}",
+            fg="white",
+        )
+
+    # Timestamp refresh — ensures invoice gets updatedAt on every sync
+    doc["updatedAt"] = datetime.now(timezone.utc)
+
+    # ------------------------
+    # DRY RUN MODE
+    # ------------------------
+    if dry_run:
+        # Load associated details + barcodes just for reporting
+        details = load_invoice_details(pg_conn, old_id)
+        detail_count = len(details)
+        barcode_count = sum(len(d.get("barcodes", [])) for d in details)
+
+        click.secho(
+            f"[dry-run] Would upsert invoice oldID={old_id}, number={number}",
+            fg="yellow",
+        )
+        click.secho(
+            f"[dry-run] Would insert invoiceDetails={detail_count}, "
+            f"barcodes={barcode_count}",
             fg="yellow",
         )
         return
 
-    requests = []
+    # Real write mode below
+    invoices_coll = coll
 
-    from datetime import datetime, timezone
+    # Use MongoDB session for per-invoice transaction
+    with mongo_client.start_session() as session:
 
-    for doc in batch:
-        old_id = doc.get("oldID")
-        if old_id is None:
-            click.secho(
-                "[warn] invoice missing oldID; skipping",
-                fg="yellow",
-            )
-            continue
-
-        doc["updatedAt"] = datetime.now(timezone.utc)
-
-        requests.append(
-            UpdateOne(
+        def txn_ops(sess):
+            # -----------------------------------------------------------
+            # 1) UPSERT invoice header (using oldID as natural identifier)
+            # -----------------------------------------------------------
+            result = invoices_coll.update_one(
                 {"oldID": old_id},
                 {"$set": doc},
                 upsert=True,
+                session=sess,
             )
-        )
 
-    if not requests:
-        return
+            # Retrieve invoice MongoDB _id
+            if result.upserted_id is not None:
+                invoice_id = result.upserted_id
+                inserted = True
+            else:
+                existing = invoices_coll.find_one(
+                    {"oldID": old_id},
+                    {"_id": 1},
+                    session=sess,
+                )
+                if not existing:
+                    raise RuntimeError(
+                        f"Invoice oldID={old_id} not found after upsert."
+                    )
+                invoice_id = existing["_id"]
+                inserted = False
 
-    try:
-        result = coll.bulk_write(requests, ordered=False)
-        click.secho(
-            f"[batch] invoices upserted={result.upserted_count} matched={result.matched_count} modified={result.modified_count}",
-            fg="blue",
-        )
-    except PyMongoError as exc:
-        click.secho("❌ Error during invoice bulk_write:", fg="red", bold=True)
-        click.secho(str(exc), fg="red")
+            if verbose:
+                action = "inserted" if inserted else "updated"
+                click.secho(
+                    f"[invoice] Header {action}: _id={invoice_id}, oldID={old_id}",
+                    fg="blue",
+                )
+
+            # -----------------------------------------------------------
+            # 2) INSERT invoice details + barcodes
+            #
+            #    add_invoice_details:
+            #      - Loads invoice details + barcodes from Postgres
+            #      - Inserts them into invoiceDetails collection
+            #      - Updates invoice.invoiceDetails with the new IDs
+            # -----------------------------------------------------------
+            add_invoice_details(
+                pg_conn=pg_conn,
+                mongo_client=mongo_client,
+                mongo_db_name=mongo_db_name,
+                invoice_old_id=old_id,
+                invoice_id=invoice_id,
+                session=sess,
+                verbose=verbose,
+            )
+
+        # Execute transaction for this invoice
+        try:
+            session.with_transaction(txn_ops)
+            if verbose:
+                click.secho(
+                    f"[ok] Invoice oldID={old_id} fully committed (header + details)",
+                    fg="green",
+                )
+        except PyMongoError as exc:
+            click.secho(
+                f"❌ MongoDB error migrating invoice oldID={old_id}: {exc}",
+                fg="red",
+            )
+        except Exception as exc:
+            click.secho(
+                f"❌ Unexpected error migrating invoice oldID={old_id}: {exc}",
+                fg="red",
+            )

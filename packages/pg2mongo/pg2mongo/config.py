@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional
 
 import tomllib
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from pg2mongo.mongo_uri import build_mongo_uri
 
 
 class PostgresConfig(BaseModel):
@@ -20,18 +21,12 @@ class PostgresConfig(BaseModel):
 class MongoConfig(BaseModel):
     uri: str
     db: str
-    username: str
-    password: str
+    username: str = ""
+    password: str = ""
 
     def build_uri(self) -> str:
-        """Inject username/password into URI if not already present."""
-        if self.username and "@" not in self.uri:
-            prefix = "mongodb://"
-            if not self.uri.startswith(prefix):
-                raise ValueError("Mongo URI must start with 'mongodb://'")
-            rest = self.uri[len(prefix) :]
-            return f"{prefix}{self.username}:{self.password}@{rest}"
-        return self.uri
+        """Return connection URI, injecting creds only when absent from *uri*."""
+        return build_mongo_uri(self.uri, self.username, self.password)
 
 
 class TransferConfig(BaseModel):
@@ -58,8 +53,8 @@ class EnvSettings(BaseSettings):
 
     MONGO_URI: str
     MONGO_DB: str
-    MONGO_USERNAME: str
-    MONGO_PASSWORD: str
+    MONGO_USERNAME: str = ""
+    MONGO_PASSWORD: str = ""
 
 
 def load_settings(config_path: Optional[str]) -> Settings:

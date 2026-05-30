@@ -9,6 +9,7 @@ from pymongo import MongoClient
 from pymongo.errors import OperationFailure, PyMongoError
 
 from pg2mongo.config import Settings
+from pg2mongo.mongo_uri import redact_mongo_uri
 
 
 def connect_postgres(settings: Settings, verbose: bool = False) -> psycopg.Connection:
@@ -41,7 +42,7 @@ def connect_mongo(settings: Settings, verbose: bool = False) -> MongoClient:
         client = MongoClient(uri, serverSelectionTimeoutMS=10000)
         client.admin.command("ping")
         if verbose:
-            click.secho(f"Mongo connected → {uri}", fg="green")
+            click.secho(f"Mongo connected → {redact_mongo_uri(uri)}", fg="green")
             click.secho(
                 f"Mongo target → db={mg.db}",
                 fg="green",

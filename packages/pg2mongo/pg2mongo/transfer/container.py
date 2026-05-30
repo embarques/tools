@@ -7,6 +7,7 @@ import click
 from pymongo import UpdateOne
 
 from pg2mongo.builders.container_build import build_container_doc
+from pg2mongo import collections as cols
 from pg2mongo.clients import connect_postgres, connect_mongo
 from pg2mongo.transfer.common import resolve_settings, close_connections_safe
 
@@ -170,7 +171,7 @@ def container_cmd(
         mongo_client = connect_mongo(settings, verbose=verbose)
 
         db = mongo_client[settings.mongo.db]
-        coll = db["containers"]
+        coll = db[cols.CONTAINERS]
 
         # 2) Determine date window (uses updatedAt when start_date is None)
         start_dt, end_dt = _determine_date_window_for_containers(

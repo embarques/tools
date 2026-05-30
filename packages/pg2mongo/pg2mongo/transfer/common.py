@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, date, time, timezone
 from typing import Tuple, Optional
 
 import click
@@ -11,7 +11,7 @@ from pg2mongo.clients import connect_postgres, connect_mongo, close_connections
 from pg2mongo.dates import inclusive_window, parse_user_date
 
 
-DEFAULT_START_DATE = datetime(2022, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+DEFAULT_START_DATE = date(2022, 1, 1)
 
 
 def resolve_settings(config_path: str | None, verbose: bool) -> Settings:
@@ -61,62 +61,92 @@ def _max_updated_at(
     return None
 
 
+def _parse_date_str(value: str | None) -> datetime | None:
+    """Accepts YYYY-MM-DD or MM-DD-YYYY and returns a UTC datetime at midnight."""
+    if not value:
+        return None
+
+    value = value.strip()
+    for fmt in ("%Y-%m-%d", "%m-%d-%Y"):
+        try:
+            d = datetime.strptime(value, fmt).date()
+            return datetime.combine(d, time.min).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+
+    raise ValueError(f"Invalid date format: {value!r}. Use YYYY-MM-DD or MM-DD-YYYY.")
+
+
+def get_last_processed_timestamp(coll, field: str = "updatedAt") -> datetime | None:
+    """Read the last processed timestamp from Mongo, or None if empty."""
+    doc = coll.find_one(
+        {field: {"$exists": True}},
+        sort=[(field, -1)],
+        projection={field: 1},
+    )
+    if not doc:
+        return None
+    ts = doc.get(field)
+    if isinstance(ts, datetime):
+        # ensure it is timezone-aware
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return ts
+    return None
+
+
 def get_date_window(
-    mongo_client: MongoClient,
-    settings: Settings,
+    coll,
     start_date: str | None,
     end_date: str | None,
-    verbose: bool,
-    *,
-    collection: str,
-) -> Tuple[str, str]:
+    verbose: bool = False,
+) -> tuple[str, str]:
     """
-    Returns (start_iso, end_iso) for Postgres WHERE ... BETWEEN SYMMETRIC.
-    Logic:
-      - If --start-date supplied → inclusive_window(start, end).
-      - Else:
-          • If Mongo has data → max(updatedAt).
-          • Else → DEFAULT_START_DATE.
-      - end_date defaults to today 23:59:59 UTC.
-    """
+    Compute the Postgres start/end timestamps as strings.
 
+    Priority:
+      1) If start_date provided -> use that.
+      2) Else use last updatedAt from Mongo.
+      3) Else fallback to DEFAULT_START_DATE (2022-01-01).
+
+    End:
+      - If end_date provided -> that day 23:59:59.999999
+      - Else -> today 23:59:59.999999 UTC
+    """
+    now = datetime.now(timezone.utc)
+
+    # ---- START DATE ----
     if start_date:
-        start_iso, end_iso = inclusive_window(start_date, end_date)
-        if verbose:
-            click.secho(
-                f"Date window (from args): {start_iso} → {end_iso}",
-                fg="magenta",
+        start_dt = _parse_date_str(start_date)
+    else:
+        last_ts = get_last_processed_timestamp(coll, "updatedAt")
+        if last_ts:
+            start_dt = last_ts
+        else:
+            # First run / empty collection -> use default
+            start_dt = datetime.combine(DEFAULT_START_DATE, time.min).replace(
+                tzinfo=timezone.utc
             )
-        return start_iso, end_iso
 
-    last = _max_updated_at(mongo_client, settings.mongo.db, collection)
-
-    if last:
-        start_dt = last
-        src = f"mongo {settings.mongo.db}.{collection}.updatedAt"
-    else:
-        start_dt = DEFAULT_START_DATE
-        src = f"default={DEFAULT_START_DATE.date().isoformat()}"
-
+    # ---- END DATE ----
     if end_date:
-        end_dt = parse_user_date(end_date).replace(
-            hour=23, minute=59, second=59, microsecond=999999
-        )
+        end_dt = _parse_date_str(end_date)
+        # move to end of day
+        end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999_999)
     else:
-        now = datetime.now(timezone.utc)
-        end_dt = now.replace(hour=23, minute=59, second=59, microsecond=999999)
-
-    start_iso = start_dt.strftime("%Y-%m-%d %H:%M:%S.%f%z")
-    end_iso = end_dt.strftime("%Y-%m-%d %H:%M:%S.%f%z")
+        # today end-of-day UTC
+        end_dt = now.replace(hour=23, minute=59, second=59, microsecond=999_999)
 
     if verbose:
         click.secho(
-            f"Date window (auto from {src}): {start_iso} → {end_iso}",
-            fg="magenta",
+            f"Date window: {start_dt} → {end_dt}",
+            fg="green",
         )
 
+    # Format for Postgres (TIMESTAMPTZ literal)
+    start_iso = start_dt.strftime("%Y-%m-%d %H:%M:%S%z")
+    end_iso = end_dt.strftime("%Y-%m-%d %H:%M:%S%z")
     return start_iso, end_iso
-
 
 def close_connections_safe(pg_conn, mongo_client):
     close_connections(pg_conn, mongo_client)

@@ -5,6 +5,7 @@ from typing import Optional
 import click
 from pymongo.errors import PyMongoError
 
+from pg2mongo import collections as cols
 from pg2mongo.transfer.common import (
     resolve_settings,
     connect_postgres_and_mongo,
@@ -57,14 +58,13 @@ def customer_cmd(
 
     try:
         pg_conn, mongo_client = connect_postgres_and_mongo(settings, verbose)
+        coll = mongo_client[settings.mongo.db][cols.CUSTOMERS]
 
         start_iso, end_iso = get_date_window(
-            mongo_client,
-            settings,
+            coll,
             start_date,
             end_date,
             verbose,
-            collection="customers",
         )
 
         sql = """
@@ -98,8 +98,6 @@ def customer_cmd(
 
         with pg_conn.cursor() as cur:
             cur.execute(sql, (start_iso, end_iso))
-
-            coll = mongo_client[settings.mongo.db]["customers"]
 
             processed = 0
             batch = []

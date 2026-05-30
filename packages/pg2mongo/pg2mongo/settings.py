@@ -1,8 +1,10 @@
 from __future__ import annotations
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
-from urllib.parse import quote_plus
 from typing import Dict, Any
+
+from pg2mongo.mongo_uri import build_mongo_uri
+from urllib.parse import quote_plus
 
 
 class AppSettings(BaseSettings):
@@ -19,8 +21,8 @@ class AppSettings(BaseSettings):
     mongo_uri_base: str = Field(alias="MONGO_URI")   # base (no creds)
     mongo_db: str = Field(alias="MONGO_DB")          # ← Mongo DB
     mongo_collection: str = Field(alias="MONGO_COLLECTION")
-    mongo_username: str = Field(alias="MONGO_USERNAME")
-    mongo_password: str = Field(alias="MONGO_PASSWORD")
+    mongo_username: str = Field(default="", alias="MONGO_USERNAME")
+    mongo_password: str = Field(default="", alias="MONGO_PASSWORD")
 
     # ==== Transfer ====
     upsert_key: str = Field(default="oldID", alias="UPsert_KEY")
@@ -44,20 +46,12 @@ class AppSettings(BaseSettings):
 
     @property
     def mongo_uri(self) -> str:
-        """
-        Final MongoDB URI with injected credentials.
-        Example:
-          base: mongodb://host1,host2/?replicaSet=rs0&authSource=admin
-          user: admin, pass: secret → mongodb://admin:secret@host1,host2/?...
-        """
-        uri = self.mongo_uri_base.strip()
-        user = quote_plus(self.mongo_username)
-        pw = quote_plus(self.mongo_password)
-        if uri.startswith("mongodb://"):
-            prefix = "mongodb://"
-            rest = uri[len(prefix):]
-            return f"{prefix}{user}:{pw}@{rest}"
-        return uri
+        """Final MongoDB URI; inject creds only when absent from the base URI."""
+        return build_mongo_uri(
+            self.mongo_uri_base,
+            self.mongo_username,
+            self.mongo_password,
+        )
 
 
 def load_settings() -> AppSettings:

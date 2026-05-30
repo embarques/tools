@@ -1,107 +1,91 @@
 from __future__ import annotations
+
 import sys
 import time
 from urllib.parse import urlparse
 
 import click
-from pymongo import MongoClient
 from pymongo.errors import (
-    OperationFailure,
     ConfigurationError,
-    ServerSelectionTimeoutError,
     InvalidURI,
+    OperationFailure,
+    ServerSelectionTimeoutError,
 )
 
-from pg2mongo.settings import load_settings, load_settings_from_dict
-from pg2mongo.config import load_db_config, dbconfig_to_settings_dict
 from pg2mongo.admin import ensure_business_indexes, seed_counters
-from pg2mongo.transfer.common import _redact_mongo_uri
+from pg2mongo.clients import connect_mongo
+from pg2mongo.mongo_uri import redact_mongo_uri
+from pg2mongo.transfer.common import resolve_settings
 
 
 @click.command("init-db")
-@click.option("--config", "config_path", type=click.Path(exists=True, dir_okay=False), default=None)
-@click.option("--db", "db_override", type=str, default=None)
-@click.option("--drop-existing", is_flag=True)
-@click.option("--dry-run", is_flag=True)
-@click.option("--verbose", is_flag=True)
-def init_db_cmd(config_path: str | None, db_override: str | None,
-                drop_existing: bool, dry_run: bool, verbose: bool) -> None:
+@click.option("--drop-existing", is_flag=True, help="Drop and recreate indexes.")
+@click.option("--dry-run", is_flag=True, help="Preview without making changes.")
+@click.pass_context
+def init_db_cmd(
+    ctx: click.Context,
+    drop_existing: bool,
+    dry_run: bool,
+) -> None:
     """Initialize MongoDB: ensure indexes and seed counters (idempotent)."""
-    # ---- load settings ----
-    if config_path:
-        cfg = load_db_config(config_path)
-        settings = load_settings_from_dict(dbconfig_to_settings_dict(cfg))
-        if verbose:
-            click.secho(f"Using config file: {config_path}", fg="green")
-    else:
-        settings = load_settings()
-        if verbose:
-            click.secho("Using environment variables", fg="green")
+    config_path = ctx.obj.get("config_path")
+    verbose = ctx.obj.get("verbose", False)
+    settings = resolve_settings(config_path, verbose)
 
     mongo_client = None
     try:
         t0 = time.perf_counter()
+        uri = settings.mongo.build_uri()
 
-        # ---- friendly connect + ping ----
         try:
-            mongo_client = MongoClient(settings.mongo_uri)
-            mongo_client.admin.command("ping")
-        except InvalidURI as e:
+            mongo_client = connect_mongo(settings, verbose=verbose)
+        except InvalidURI as exc:
             raise click.ClickException(
                 f"MongoDB connection failed: Invalid URI.\n"
-                f"  URI: {_redact_mongo_uri(settings.mongo_uri)}\n"
-                f"  Details: {e}"
+                f"  URI: {redact_mongo_uri(uri)}\n"
+                f"  Details: {exc}"
+            ) from exc
+        except OperationFailure as exc:
+            parsed = urlparse(uri)
+            query = (
+                dict(kv.split("=", 1) for kv in parsed.query.split("&") if "=" in kv)
+                if parsed.query
+                else {}
             )
-        except OperationFailure as e:
-            parsed = urlparse(settings.mongo_uri)
-            user = (parsed.username or "").strip()
-            query = dict(kv.split("=", 1) for kv in parsed.query.split("&") if "=" in kv) if parsed.query else {}
-            auth_source = query.get("authSource", "<default>")
-            mech = query.get("authMechanism", "<default>")
-            code = getattr(e, "code", None)
-            code_name = getattr(e, "details", {}).get("codeName") if getattr(e, "details", None) else None
             raise click.ClickException(
                 f"MongoDB authentication failed.\n"
-                f"  URI: {_redact_mongo_uri(settings.mongo_uri)}\n"
-                f"  Username: {user or '<none>'}\n"
-                f"  authSource: {auth_source}\n"
-                f"  authMechanism: {mech}\n"
-                f"  Error: {str(e)}\n"
-                f"  Code: {code or '<n/a>'} ({code_name or 'AuthenticationFailed'})\n"
-            )
-        except ServerSelectionTimeoutError as e:
+                f"  URI: {redact_mongo_uri(uri)}\n"
+                f"  Username: {(parsed.username or '').strip() or '<none>'}\n"
+                f"  authSource: {query.get('authSource', '<default>')}\n"
+                f"  authMechanism: {query.get('authMechanism', '<default>')}\n"
+                f"  Error: {exc}\n"
+            ) from exc
+        except ServerSelectionTimeoutError as exc:
             raise click.ClickException(
                 f"MongoDB server selection timed out.\n"
-                f"  URI: {_redact_mongo_uri(settings.mongo_uri)}\n"
-                f"  Details: {e}"
-            )
-        except ConfigurationError as e:
+                f"  URI: {redact_mongo_uri(uri)}\n"
+                f"  Details: {exc}"
+            ) from exc
+        except ConfigurationError as exc:
             raise click.ClickException(
                 f"MongoDB configuration error.\n"
-                f"  URI: {_redact_mongo_uri(settings.mongo_uri)}\n"
-                f"  Details: {e}"
-            )
-        except Exception as e:
-            raise click.ClickException(
-                f"MongoDB connection failed with an unexpected error.\n"
-                f"  URI: {_redact_mongo_uri(settings.mongo_uri)}\n"
-                f"  Details: {e}"
-            )
+                f"  URI: {redact_mongo_uri(uri)}\n"
+                f"  Details: {exc}"
+            ) from exc
 
-        dbname = db_override or settings.mongo_db
+        dbname = settings.mongo.db
         db = mongo_client[dbname]
-        if verbose:
-            click.secho(f"Mongo DB: {dbname} ({_redact_mongo_uri(settings.mongo_uri)})", fg="green")
 
-        # ---- work ----
         if dry_run:
-            click.secho("DRY RUN: would create indexes and counters (no changes).", fg="yellow")
+            click.secho(
+                "DRY RUN: would create indexes and counters (no changes).",
+                fg="yellow",
+            )
         else:
             ensure_business_indexes(db, drop_existing=drop_existing)
             seed_counters(db)
 
         t1 = time.perf_counter()
-
         click.secho("────────────────────────────────────────────", fg="cyan", bold=True)
         click.secho("Database Initialization Summary", fg="cyan", bold=True)
         click.secho("────────────────────────────────────────────", fg="cyan", bold=True)
@@ -113,8 +97,5 @@ def init_db_cmd(config_path: str | None, db_override: str | None,
         sys.exit(0)
 
     finally:
-        try:
-            if mongo_client:
-                mongo_client.close()
-        except Exception:
-            pass
+        if mongo_client:
+            mongo_client.close()

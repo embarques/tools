@@ -4,7 +4,6 @@ from typing import Dict, Any
 
 from pg2mongo.utils import to_utc, decimal_to_float
 
-
 def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     """
     Build a Mongo invoice document from a vwinvoice_api row.

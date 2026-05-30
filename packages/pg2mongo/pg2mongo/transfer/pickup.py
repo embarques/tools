@@ -6,6 +6,7 @@ import click
 from pymongo import UpdateOne
 from pymongo.errors import PyMongoError
 
+from pg2mongo import collections as cols
 from pg2mongo.transfer.common import (
     resolve_settings,
     connect_postgres_and_mongo,
@@ -59,14 +60,13 @@ def pickup_cmd(
 
     try:
         pg_conn, mongo_client = connect_postgres_and_mongo(settings, verbose)
+        coll = mongo_client[settings.mongo.db][cols.PICKUPS]
 
         start_iso, end_iso = get_date_window(
-            mongo_client,
-            settings,
+            coll,
             start_date,
             end_date,
             verbose,
-            collection="pickups",
         )
 
         sql = """
@@ -118,8 +118,7 @@ def pickup_cmd(
             )
 
         db = mongo_client[settings.mongo.db]
-        coll = db["pickups"]
-
+        coll = db[cols.PICKUPS]
         processed = 0
         batch_docs = []
 

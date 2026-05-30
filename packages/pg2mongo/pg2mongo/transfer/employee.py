@@ -6,6 +6,7 @@ import click
 from pymongo import UpdateOne
 
 from pg2mongo.builders.employee_build import build_employee_doc
+from pg2mongo import collections as cols
 from pg2mongo.clients import connect_postgres, connect_mongo
 from pg2mongo.transfer.common import resolve_settings, close_connections_safe
 
@@ -40,6 +41,7 @@ ORDER BY id
     is_flag=True,
     help="Preview actions without writing to Mongo.",
 )
+@click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
 @click.pass_context
 def employee_cmd(
     ctx: click.Context,
@@ -63,7 +65,7 @@ def employee_cmd(
         mongo_client = connect_mongo(settings, verbose=verbose)
 
         db = mongo_client[settings.mongo.db]
-        coll = db["employees"]
+        coll = db[cols.EMPLOYEES]
 
         # 2) Run query against Postgres
         if verbose:

@@ -2,18 +2,25 @@
 server = "embserver.embarques.net"
 port = 5432
 db = "mydb"
-username = "myuser"
-password = "mypass"
-schema = "public"
-table = "invoices"
+username = "your_pg_user"
+password = "your_pg_password"
+schema_name = "public"
 
 [mongo]
-# Base URI (no credentials)
+# Option A — Replica set (default below): URI without credentials;
+#           username and password are injected automatically.
 uri = "mongodb://mongo1:27017,mongo2:27017,mongo3:27017/?replicaSet=rs0&connectTimeoutMS=10000&authSource=admin&authMechanism=SCRAM-SHA-256"
 db = "clientdb"
-collection = "invoices"
-username = "xxx"
-password = "xxx"
+username = "your_mongo_user"
+password = "your_mongo_password"
+
+# Option B — MongoDB Atlas: full URI with embedded credentials;
+#           username and password can be omitted or left empty.
+#
+# uri = "mongodb+srv://your_user:your_password@cluster0.example.mongodb.net/?retryWrites=true&w=majority&authSource=admin"
+# db = "clientdb"
+# username = ""
+# password = ""
 
 [transfer]
 upsert_key = "oldID"

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pg2mongo"
-version = "0.1.0"
+version = "0.6.0"
 description = "Postgres to MongoDB transfer tool."
 authors = [{ name = "Your Name" }]
 readme = "README.md"

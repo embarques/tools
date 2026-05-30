@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, date, timezone
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Mapping, Optional, Sequence
+
+from pg2mongo import collections as cols
 
 from pymongo.database import Database
 from pymongo import ReturnDocument
@@ -40,6 +42,32 @@ def decimal_to_float(value: Any) -> Any:
         return float(value)
     return value
 
+def to_float(value):
+    """
+    Safely convert Postgres numeric fields to float.
+    Strings or None become 0.0. Decimal becomes float.
+    """
+    try:
+        if value is None:
+            return 0.0
+        return float(value)
+    except Exception:
+        return 0.0
+
+
+def pg_row_to_dict(row: Any, col_names: Sequence[str] | None = None) -> dict[str, Any]:
+    """
+    Normalize a psycopg row to a plain dict.
+
+    When the connection uses ``dict_row``, *row* is already a mapping and must
+    be returned as-is.  Tuple rows are zipped with *col_names*.
+    """
+    if isinstance(row, Mapping):
+        return dict(row)
+    if col_names is None:
+        raise ValueError("col_names required when row is not a mapping")
+    return dict(zip(col_names, row))
+
 
 # ------------------------------
 # Mongo helpers (from mongo_utils)
@@ -71,7 +99,7 @@ def get_next_sequence(
     Raises:
       RuntimeError if the counter document is missing.
     """
-    coll = database["counters"]
+    coll = database[cols.COUNTERS]
     doc = coll.find_one_and_update(
         {"_id": sequence_name},
         {"$inc": {"sequenceValue": 1}},
