@@ -24,7 +24,7 @@ def test_build_customer_doc_uses_new_contact_shape():
     )
 
     assert doc["oldID"] == 10
-    assert doc["customerType"] == 1
+    assert doc["customerType"] == 2
     assert doc["phones"] == [
         {"type": "mobile", "number": "+12015550100", "isPrimary": True},
         {"type": "business", "number": "555-0101"},

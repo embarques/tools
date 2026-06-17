@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, Any
 
+from pg2mongo.customer_types import SENDER, RECEIVER, mongo_customer_type
 from pg2mongo.utils import to_utc
 
 
@@ -25,16 +26,21 @@ def _party_doc(row: Dict[str, Any], prefix: str) -> Dict[str, Any] | None:
     if phone2:
         phones.append(_phone_doc("business", phone2))
 
-    default_customer_type = 1 if prefix == "sender" else 2
+    default_customer_type = SENDER if prefix == "sender" else RECEIVER
+
+    customer_type = row.get(f"{prefix}.customerType")
+    if customer_type is not None:
+        customer_type = int(customer_type)
+    else:
+        customer_type = mongo_customer_type(
+            row.get(f"{prefix}.cus_type"),
+            default=default_customer_type,
+        )
 
     return {
         "id": int(party_id),
         "name": row.get(f"{prefix}.name") or "",
-        "customerType": int(
-            row.get(f"{prefix}.customerType")
-            or row.get(f"{prefix}.cus_type")
-            or default_customer_type
-        ),
+        "customerType": customer_type,
         "phones": phones,
         "email": row.get(f"{prefix}.email") or "",
         "IDNumber": row.get(f"{prefix}.id_number") or "",

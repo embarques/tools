@@ -23,14 +23,14 @@ def test_build_invoice_doc_uses_new_reference_shape():
             "paid_status": "PARTIAL",
             "sender.id": 11,
             "sender.name": "Sender Co",
-            "sender.cus_type": 1,
+            "sender.cus_type": 0,
             "sender.phone1": "+13055551000",
             "sender.address.city": "Miami",
             "sender.address.state": "FL",
             "sender.address.zipcode": "33101",
             "receiver.id": 12,
             "receiver.name": "Receiver Co",
-            "receiver.cus_type": 2,
+            "receiver.cus_type": 1,
             "receiver.phone1": "+13055552000",
         }
     )
@@ -44,6 +44,7 @@ def test_build_invoice_doc_uses_new_reference_shape():
         "fullName": "Tasador",
     }
     assert doc["sender"]["id"] == 11
+    assert doc["sender"]["customerType"] == 1
     assert doc["sender"]["phones"] == [
         {"type": "business", "number": "+13055551000", "isPrimary": True}
     ]
@@ -53,6 +54,7 @@ def test_build_invoice_doc_uses_new_reference_shape():
         "zipcode": "33101",
     }
     assert doc["receiver"]["id"] == 12
+    assert doc["receiver"]["customerType"] == 2
     assert doc["receiver"]["phones"] == [
         {"type": "mobile", "number": "+13055552000", "isPrimary": True}
     ]

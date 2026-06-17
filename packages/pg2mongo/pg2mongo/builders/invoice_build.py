@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Dict, Any
 
 from pg2mongo import collections as cols
+from pg2mongo.customer_types import SENDER, RECEIVER, mongo_customer_type
 from pg2mongo.utils import to_utc, decimal_to_float
 
 
@@ -34,7 +35,12 @@ def _phone_doc(phone_type: str, number: str, *, is_primary: bool = False) -> Dic
     return phone
 
 
-def _party_doc(row: Dict[str, Any], prefix: str, primary_phone_type: str) -> Dict[str, Any] | None:
+def _party_doc(
+    row: Dict[str, Any],
+    prefix: str,
+    primary_phone_type: str,
+    default_customer_type: int,
+) -> Dict[str, Any] | None:
     party_id = _safe_int(row.get(f"{prefix}.id"))
     if party_id is None:
         return None
@@ -50,7 +56,10 @@ def _party_doc(row: Dict[str, Any], prefix: str, primary_phone_type: str) -> Dic
     party: Dict[str, Any] = {
         "id": party_id,
         "name": row.get(f"{prefix}.name") or "",
-        "customerType": int(row.get(f"{prefix}.cus_type") or 0),
+        "customerType": mongo_customer_type(
+            row.get(f"{prefix}.cus_type"),
+            default=default_customer_type,
+        ),
         "phones": phones,
         "IDNumber": row.get(f"{prefix}.id_number") or "",
         "address": {
@@ -108,11 +117,11 @@ def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         cols.INVOICE_DETAILS_FIELD: [],
     }
 
-    sender = _party_doc(row, "sender", "business")
+    sender = _party_doc(row, "sender", "business", SENDER)
     if sender:
         doc["sender"] = sender
 
-    receiver = _party_doc(row, "receiver", "mobile")
+    receiver = _party_doc(row, "receiver", "mobile", RECEIVER)
     if receiver:
         doc["receiver"] = receiver
 

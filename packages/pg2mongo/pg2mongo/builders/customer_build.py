@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, Any
 
+from pg2mongo.customer_types import mongo_customer_type
 from pg2mongo.utils import to_utc
 
 
@@ -29,7 +30,7 @@ def build_customer_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     doc: Dict[str, Any] = {
         "oldID": int(row["id"]),
         "name": row.get("name") or "",
-        "customerType": int(row.get("cus_type", 0)),
+        "customerType": mongo_customer_type(row.get("cus_type")),
         "phones": phones,
         "email": row.get("email") or "",
         "createdAt": created_at,
