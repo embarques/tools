@@ -14,19 +14,21 @@ from pg2mongo.transfer.common import resolve_settings_from_ctx, close_connection
 
 EMPLOYEE_SQL = """
 SELECT
-    id,
-    name,
-    title,
-    department,
-    address       AS "address.address1",
-    city          AS "address.city",
-    zipcode       AS "address.zipcode",
-    phone         AS phone1,
-    email,
-    country       AS "address.country",
-    branch_id
-FROM employee
-ORDER BY id
+    e.id,
+    e.name,
+    e.title,
+    e.department,
+    e.address       AS "address.address1",
+    e.city          AS "address.city",
+    e.zipcode       AS "address.zipcode",
+    e.phone         AS phone1,
+    e.email,
+    e.country       AS "address.country",
+    e.branch_id,
+    b.code AS branch_code
+FROM employee e
+LEFT JOIN branch b ON b.id = e.branch_id
+ORDER BY e.id
 """
 
 
@@ -103,7 +105,13 @@ def employee_cmd(
             ops.append(
                 UpdateOne(
                     {"_id": doc["_id"]},
-                    {"$set": doc},
+                    {
+                        "$set": doc,
+                        "$unset": {
+                            "phone1": "",
+                            "phone2": "",
+                        },
+                    },
                     upsert=True,
                 )
             )

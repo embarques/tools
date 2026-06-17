@@ -215,7 +215,12 @@ def _flush_pickup_batch(
         requests.append(
             UpdateOne(
                 {"oldID": old_id},
-                {"$set": doc},
+                {
+                    "$set": doc,
+                    "$unset": {
+                        "user": "",
+                    },
+                },
                 upsert=True,
             )
         )

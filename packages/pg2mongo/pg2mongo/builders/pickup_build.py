@@ -5,6 +5,48 @@ from typing import Dict, Any
 from pg2mongo.utils import to_utc
 
 
+def _phone_doc(phone_type: str, number: str, *, is_primary: bool = False) -> Dict[str, Any]:
+    phone: Dict[str, Any] = {"type": phone_type, "number": number}
+    if is_primary:
+        phone["isPrimary"] = True
+    return phone
+
+
+def _party_doc(row: Dict[str, Any], prefix: str) -> Dict[str, Any] | None:
+    party_id = row.get(f"{prefix}.id")
+    if not party_id:
+        return None
+
+    phone1 = row.get(f"{prefix}.phone1") or ""
+    phone2 = row.get(f"{prefix}.phone2") or ""
+    phones = []
+    if phone1:
+        phones.append(_phone_doc("mobile", phone1, is_primary=True))
+    if phone2:
+        phones.append(_phone_doc("business", phone2))
+
+    default_customer_type = 1 if prefix == "sender" else 2
+
+    return {
+        "id": int(party_id),
+        "name": row.get(f"{prefix}.name") or "",
+        "customerType": int(
+            row.get(f"{prefix}.customerType")
+            or row.get(f"{prefix}.cus_type")
+            or default_customer_type
+        ),
+        "phones": phones,
+        "email": row.get(f"{prefix}.email") or "",
+        "IDNumber": row.get(f"{prefix}.id_number") or "",
+        "address": {
+            "address1": row.get(f"{prefix}.address.address1") or "",
+            "city": row.get(f"{prefix}.address.city") or "",
+            "state": row.get(f"{prefix}.address.state") or "",
+            "zipcode": row.get(f"{prefix}.address.zipcode") or "",
+        },
+    }
+
+
 def build_pickup_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     """
     Build the pickup Mongo doc, matching the shape you described.
@@ -15,40 +57,31 @@ def build_pickup_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         "createdAt": to_utc(row.get("pickup_created")),
         "updatedAt": to_utc(row.get("pickup_modified")),
         "completed": bool(row.get("completed", False)),
-        "user": {
-            "_id": int(row.get("user.id") or 0),
-            "name": row.get("user.name") or "",
-        },
         "branch": {
-            "_id": int(row.get("branch.id") or 0),
+            "id": int(row.get("branch.id") or 0),
             "code": row.get("branch.code") or "",
         },
-        "employee": {},  # You can fill in details if needed
+        "employee": {
+            "id": int(row.get("employee.id") or 0),
+            "name": row.get("employee.name") or "",
+            "phones": [],
+            "active": True,
+        },
         "purpose": row.get("purpose") or "",
         "comments": [],
         "sector": {
-            "_id": int(row.get("sector_id") or 0),
+            "id": int(row.get("sector_id") or 0),
             "name": row.get("sector_name") or "",
         },
     }
 
-    # Sender
-    sender_id = row.get("sender.id")
-    if sender_id:
-        doc["sender"] = {
-            "_id": None,  # link to customer ObjectId if you want later
-            "oldID": int(sender_id),
-            "name": row.get("sender.name") or "",
-            "customerType": 1,
-            "phone1": row.get("sender.phone1") or "",
-            "address": {
-                "address1": row.get("sender.address.address1") or "",
-                "city": row.get("sender.address.city") or "",
-                "state": row.get("sender.address.state") or "",
-                "zipcode": row.get("sender.address.zipcode") or "",
-                "country": row.get("sender.address.country") or "",
-            },
-        }
+    sender = _party_doc(row, "sender")
+    if sender:
+        doc["sender"] = sender
+
+    receiver = _party_doc(row, "receiver")
+    if receiver:
+        doc["receiver"] = receiver
 
     # Comments
     comment_text = row.get("comment") or ""
@@ -79,7 +112,8 @@ def format_pickup_verbose(doc: dict, *, action: str) -> str:
     sender = doc.get("sender") or {}
     address = sender.get("address") or {}
     name = sender.get("name") or ""
-    phone = sender.get("phone1") or ""
+    phones = sender.get("phones") or []
+    phone = phones[0].get("number", "") if phones else ""
     city = address.get("city") or ""
     date_str = format_pickup_date(doc.get("date"))
     return (

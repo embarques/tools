@@ -48,6 +48,7 @@ SELECT v.id,
        v.is_void,
        v.invoice_date,
        v.branch_id,
+       COALESCE(b.code, ''::character varying) AS branch_code,
        v.container_id,
        v.container_designation,
        v.driver_id,
@@ -94,6 +95,7 @@ SELECT v.id,
        v."receiver.address.zipcode",
        v."receiver.address.country"
 FROM vwinvoice_api v
+LEFT JOIN branch b ON b.id = v.branch_id
 LEFT JOIN auth_user u ON u.id = v.user_id
 LEFT JOIN employee driver ON driver.id = v.driver_id
 WHERE v.is_void = FALSE
@@ -316,7 +318,14 @@ def _process_single_invoice(
         def txn_ops(sess):
             result = invoices_coll.update_one(
                 {"oldID": old_id},
-                {"$set": doc},
+                {
+                    "$set": doc,
+                    "$unset": {
+                        "user": "",
+                        "driver": "",
+                        "invoice_details": "",
+                    },
+                },
                 upsert=True,
                 session=sess,
             )

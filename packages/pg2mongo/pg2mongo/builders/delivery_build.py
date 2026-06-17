@@ -20,29 +20,30 @@ def build_delivery_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     container: Dict[str, Any] | None = None
     if row.get("container_id"):
         container = {
-            "_id": row.get("container_id"),
+            "id": row.get("container_id"),
             "name": row.get("container_designation") or "",
+            "containerNumber": row.get("container_number") or "",
         }
 
     # Employee subdocs
     employee: Dict[str, Any] | None = None
     if row.get("employee_id"):
         employee = {
-            "_id": row.get("employee_id"),
+            "id": row.get("employee_id"),
             "name": row.get("employee_name") or "",
         }
 
     helper1: Dict[str, Any] | None = None
     if row.get("helper1_id"):
         helper1 = {
-            "_id": row.get("helper1_id"),
+            "id": row.get("helper1_id"),
             "name": row.get("helper1_name") or "",
         }
 
     helper2: Dict[str, Any] | None = None
     if row.get("helper2_id"):
         helper2 = {
-            "_id": row.get("helper2_id"),
+            "id": row.get("helper2_id"),
             "name": row.get("helper2_name") or "",
         }
 

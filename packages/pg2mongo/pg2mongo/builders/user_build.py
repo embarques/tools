@@ -14,24 +14,25 @@ def build_user_doc(row: Dict[str, Any]) -> Dict[str, Any]:
       register_key, temp_key, branch_id
     """
     branch_id = row.get("branch_id") or 0
-    branch = {"_id": branch_id} if branch_id else None
+    branch = None
+    if branch_id:
+        branch = {
+            "id": int(branch_id),
+            "name": row.get("branch_name") or "",
+            "code": row.get("branch_code") or "",
+        }
 
     doc: Dict[str, Any] = {
         "_id": row["id"],
-        "name": row.get("full_name") or row.get("username") or "",
+        "uid": row.get("uid") or "",
+        "email": row.get("email") or "",
         "userName": row.get("username") or "",
         "fullName": row.get("full_name") or "",
-        "password": "",  # not provided by the query (and we don't want raw passwords anyway)
-        "active": True,  # you can later map auth_user.is_active if needed
+        "active": bool(row.get("is_active", True)),
         "branch": branch,
-        "startTime": "",
-        "endTime": "",
         "role": None,
         "createdAt": to_utc(row.get("time_created")),
         "updatedAt": to_utc(row.get("time_created")),
-        "createdById": 0,
-        "accessCode": None,
-        "type": "",
     }
 
     # If later you uncomment RegistrationKey fields in the Go model,

@@ -31,8 +31,8 @@ def test_build_journal_doc_maps_account_chart_and_amounts():
 
     assert doc["oldID"] == 99
     assert doc["description"] == "Payment"
-    assert doc["accounts"][0]["_id"] == 1
+    assert doc["accounts"][0]["id"] == 1
     assert doc["accounts"][0]["name"] == "CASH ON HAND"
     assert doc["accounts"][0]["credit"] == 150.5
-    assert doc["incomeStatement"]["_id"] == 10
+    assert doc["incomeStatement"]["id"] == 10
     assert doc["customer"]["oldID"] == 42

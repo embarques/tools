@@ -24,7 +24,7 @@ ACTIVITY_LOGS = "activity_logs"
 JOURNALS = "journals"
 
 # Invoice document field holding references to invoice_details documents
-INVOICE_DETAILS_FIELD = "invoice_details"
+INVOICE_DETAILS_FIELD = "invoiceDetails"
 
 
 def qualified(db_name: str, collection: str) -> str:

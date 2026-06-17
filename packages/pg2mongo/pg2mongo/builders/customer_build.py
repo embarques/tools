@@ -1,54 +1,48 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Dict, Any
 
 from pg2mongo.utils import to_utc
 
 
+def _phone_doc(phone_type: str, number: str, *, is_primary: bool = False) -> Dict[str, Any]:
+    phone: Dict[str, Any] = {"type": phone_type, "number": number}
+    if is_primary:
+        phone["isPrimary"] = True
+    return phone
+
+
 def build_customer_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Map a Postgres row from vwcustomer_api to the target Mongo customer document shape:
-
-    {
-        "oldID": <id>,
-        "name": "...",
-        "customerType": 1,
-        "phone1": "...",
-        "phone2": "...",
-        "createdAt": <datetime>,
-        "branch": { "_id": 1 },
-        "createdByID": 5,
-        "address": {
-            "address1": "...",
-            "address2": "...",
-            "apartment": "...",
-            "city": "...",
-            "state": "...",
-            "zipcode": "...",
-            "country": "US",
-        }
-    }
+    Map a Postgres row from vwcustomer_api to the current Mongo customer shape.
     """
     created_at = to_utc(row.get("time_created"))
     updated_at = to_utc(row.get("time_created"))  # or time_modified if you add it
+    phones = []
+    phone1 = row.get("phone1") or ""
+    phone2 = row.get("phone2") or ""
+    if phone1:
+        phones.append(_phone_doc("mobile", phone1, is_primary=True))
+    if phone2:
+        phones.append(_phone_doc("business", phone2))
 
     doc: Dict[str, Any] = {
         "oldID": int(row["id"]),
         "name": row.get("name") or "",
         "customerType": int(row.get("cus_type", 0)),
-        "phone1": row.get("phone1") or "",
-        "phone2": row.get("phone2") or "",
+        "phones": phones,
+        "email": row.get("email") or "",
         "createdAt": created_at,
         "updatedAt": updated_at,
         "branch": {
-            "_id": int(row.get("branch_id") or 0),
+            "id": int(row.get("branch_id") or 0),
+            "code": row.get("branch_code") or "",
+            "name": row.get("branch_name") or "",
         },
-        "createdByID": int(row.get("created_by_id") or 0),
+        "IDNumber": row.get("id_number") or "",
+        "notes": row.get("notes") or "",
         "address": {
             "address1": row.get("address.address1") or "",
-            "address2": row.get("address.address2") or "",
-            "apartment": row.get("address.apt") or "",
             "city": row.get("address.city") or "",
             "state": row.get("address.state") or "",
             "zipcode": row.get("address.zipcode") or "",

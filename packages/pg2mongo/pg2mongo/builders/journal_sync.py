@@ -98,7 +98,7 @@ def upsert_invoice_journals(
 
     for template in journal_docs:
         doc = dict(template)
-        doc["invoice"] = {"_id": invoice_id}
+        doc["invoice"] = {"id": invoice_id}
         old_id = doc["oldID"]
 
         coll.update_one(

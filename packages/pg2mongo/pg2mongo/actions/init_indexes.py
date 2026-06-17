@@ -51,7 +51,7 @@ def init_indexes_cmd(ctx: click.Context, verbose: bool):
         create_unique_index(db, cols.BRANCHES, {"name": 1})
 
         # Customers
-        create_unique_index(db, cols.CUSTOMERS, {"name": 1, "phone1": 1})
+        create_unique_index(db, cols.CUSTOMERS, {"name": 1, "phones.number": 1})
 
         # Invoices
         create_unique_index(db, cols.INVOICES, {"number": 1})

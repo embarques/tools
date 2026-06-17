@@ -101,7 +101,18 @@ def user_cmd(
             ops.append(
                 UpdateOne(
                     {"_id": doc["_id"]},
-                    {"$set": doc},
+                    {
+                        "$set": doc,
+                        "$unset": {
+                            "name": "",
+                            "password": "",
+                            "startTime": "",
+                            "endTime": "",
+                            "createdById": "",
+                            "accessCode": "",
+                            "type": "",
+                        },
+                    },
                     upsert=True,
                 )
             )

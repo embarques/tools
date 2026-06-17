@@ -12,7 +12,7 @@ def _optional_ref(
     ref_id = int(entity_id or 0)
     if ref_id <= 0:
         return None
-    ref: Dict[str, Any] = {"_id": ref_id}
+    ref: Dict[str, Any] = {"id": ref_id}
     if name:
         ref["name"] = name
     return ref
@@ -26,7 +26,7 @@ def build_income_statement_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     legacy Go importer and ``journal.incomeStatement._id`` references.
     """
     branch_id = int(row.get("branch_id") or 0)
-    branch: Dict[str, Any] = {"_id": branch_id}
+    branch: Dict[str, Any] = {"id": branch_id}
     if row.get("branch_code"):
         branch["code"] = row["branch_code"]
     if row.get("branch_name"):

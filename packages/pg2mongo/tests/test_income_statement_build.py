@@ -36,4 +36,4 @@ def test_build_income_statement_doc():
     assert doc["status"] == "CLOSED"
     assert doc["summaryTotal"]["invoices"] == 100.0
     assert doc["summaryTotal"]["accountsTranfer"] == 0.0
-    assert doc["supervisor"]["_id"] == 5
+    assert doc["supervisor"]["id"] == 5

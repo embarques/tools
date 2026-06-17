@@ -39,7 +39,7 @@ def create_unique_index(db: Database, collection_name: str, keys: List[Tuple[str
 
 def ensure_business_indexes(db: Database, *, drop_existing: bool = False) -> None:
     create_unique_index(db, cols.BRANCHES, [("name", ASCENDING)], drop_existing=drop_existing)
-    create_unique_index(db, cols.CUSTOMERS, [("name", ASCENDING), ("phone1", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.CUSTOMERS, [("name", ASCENDING), ("phones.number", ASCENDING)], drop_existing=drop_existing)
     create_unique_index(db, cols.INVOICES, [("number", ASCENDING)], drop_existing=drop_existing)
     create_unique_index(db, cols.USERS, [("userName", ASCENDING), ("roles", ASCENDING)], drop_existing=drop_existing)
     create_unique_index(db, cols.CONTAINERS, [("name", ASCENDING)], drop_existing=drop_existing)

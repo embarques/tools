@@ -5,10 +5,78 @@ from typing import Dict, Any
 from pg2mongo import collections as cols
 from pg2mongo.utils import to_utc, decimal_to_float
 
+
+def _safe_int(value: Any) -> int | None:
+    try:
+        if value is None:
+            return None
+        parsed = int(value)
+    except Exception:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _ref_with_id(value: Any, **extra: Any) -> Dict[str, Any]:
+    ref: Dict[str, Any] = {}
+    parsed_id = _safe_int(value)
+    if parsed_id is not None:
+        ref["id"] = parsed_id
+    for key, val in extra.items():
+        if val not in (None, ""):
+            ref[key] = val
+    return ref
+
+
+def _phone_doc(phone_type: str, number: str, *, is_primary: bool = False) -> Dict[str, Any]:
+    phone: Dict[str, Any] = {"type": phone_type, "number": number}
+    if is_primary:
+        phone["isPrimary"] = True
+    return phone
+
+
+def _party_doc(row: Dict[str, Any], prefix: str, primary_phone_type: str) -> Dict[str, Any] | None:
+    party_id = _safe_int(row.get(f"{prefix}.id"))
+    if party_id is None:
+        return None
+
+    phone1 = row.get(f"{prefix}.phone1") or ""
+    phone2 = row.get(f"{prefix}.phone2") or ""
+    phones = []
+    if phone1:
+        phones.append(_phone_doc(primary_phone_type, phone1, is_primary=True))
+    if phone2:
+        phones.append(_phone_doc("business", phone2))
+
+    party: Dict[str, Any] = {
+        "id": party_id,
+        "name": row.get(f"{prefix}.name") or "",
+        "customerType": int(row.get(f"{prefix}.cus_type") or 0),
+        "phones": phones,
+        "IDNumber": row.get(f"{prefix}.id_number") or "",
+        "address": {
+            "city": row.get(f"{prefix}.address.city") or "",
+            "state": row.get(f"{prefix}.address.state") or "",
+            "zipcode": row.get(f"{prefix}.address.zipcode") or "",
+        },
+    }
+
+    address1 = row.get(f"{prefix}.address.address1") or ""
+    country = row.get(f"{prefix}.address.country") or ""
+    if address1:
+        party["address"]["address1"] = address1
+    if country:
+        party["address"]["country"] = country
+
+    branch = _ref_with_id(row.get(f"{prefix}.branch_id"))
+    if branch:
+        party["branch"] = branch
+
+    return party
+
+
 def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     """
     Build a Mongo invoice document from a vwinvoice_api row.
-    This focuses on the core header fields and nested sender/receiver.
     """
     doc: Dict[str, Any] = {
         "oldID": int(row["id"]),
@@ -18,11 +86,21 @@ def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         "date": to_utc(row.get("invoice_date")),
         "paidRegion": row.get("paid_region") or "",
         "paidStatus": row.get("paid_status") or "",
-        "branch": {"_id": int(row.get("branch_id") or 0)},
+        "branch": _ref_with_id(
+            row.get("branch_id"),
+            code=row.get("branch_code") or "",
+        ),
         "cost": decimal_to_float(row.get("cost")),
-        "user": {"_id": int(row.get("user_id") or 0), "name": row.get("user.name") or ""},
-        "driver": {"_id": int(row.get("driver_id") or 0), "name": row.get("driver.name") or ""},
-        "container": {"_id": int(row.get("container_id") or 0), "name": row.get("container_designation") or ""},
+        "employee": _ref_with_id(
+            row.get("driver_id") or row.get("user_id"),
+            name=row.get("driver.name") or "",
+            userName=row.get("user.name") or "",
+            fullName=row.get("driver.name") or row.get("user.name") or "",
+        ),
+        "container": _ref_with_id(
+            row.get("container_id"),
+            name=row.get("container_designation") or "",
+        ),
         "discount": decimal_to_float(row.get("discount") or 0),
         "payment": decimal_to_float(row.get("payment") or 0),
         "balance": decimal_to_float(row.get("balance") or 0),
@@ -30,52 +108,12 @@ def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         cols.INVOICE_DETAILS_FIELD: [],
     }
 
-    # Sender
-    sender_id = row.get("sender.id")
-    if sender_id:
-        sender = {
-            "oldID": int(sender_id),
-            "name": row.get("sender.name") or "",
-            "customerType": int(row.get("sender.cus_type") or 0),
-            "phone1": row.get("sender.phone1") or "",
-            "phone2": row.get("sender.phone2") or "",
-            "createdAt": to_utc(row.get("sender.time_created")),
-            "branch": {"_id": int(row.get("sender.branch_id") or 0)},
-            "createdByID": int(row.get("sender.created_by_id") or 0),
-            "address": {
-                "address1": row.get("sender.address.address1") or "",
-                "address2": row.get("sender.address.address2") or "",
-                "apartment": row.get("sender.address.apt") or "",
-                "city": row.get("sender.address.city") or "",
-                "state": row.get("sender.address.state") or "",
-                "zipcode": row.get("sender.address.zipcode") or "",
-                "country": row.get("sender.address.country") or "",
-            },
-        }
+    sender = _party_doc(row, "sender", "business")
+    if sender:
         doc["sender"] = sender
 
-    # Receiver
-    recv_id = row.get("receiver.id")
-    if recv_id:
-        receiver = {
-            "oldID": int(recv_id),
-            "name": row.get("receiver.name") or "",
-            "customerType": int(row.get("receiver.cus_type") or 0),
-            "phone1": row.get("receiver.phone1") or "",
-            "phone2": row.get("receiver.phone2") or "",
-            "createdAt": to_utc(row.get("receiver.time_created")),
-            "branch": {"_id": int(row.get("receiver.branch_id") or 0)},
-            "createdByID": int(row.get("receiver.created_by_id") or 0),
-            "address": {
-                "address1": row.get("receiver.address.address1") or "",
-                "address2": row.get("receiver.address.address2") or "",
-                "apartment": row.get("receiver.address.apt") or "",
-                "city": row.get("receiver.address.city") or "",
-                "state": row.get("receiver.address.state") or "",
-                "zipcode": row.get("receiver.address.zipcode") or "",
-                "country": row.get("receiver.address.country") or "",
-            },
-        }
+    receiver = _party_doc(row, "receiver", "mobile")
+    if receiver:
         doc["receiver"] = receiver
 
     return doc

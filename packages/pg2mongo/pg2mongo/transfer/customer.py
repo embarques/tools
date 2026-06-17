@@ -69,26 +69,29 @@ def customer_cmd(
         )
 
         sql = """
-        SELECT id,
-               c_type AS "cus_type",
-               branch_id,
-               name,
-               phone1,
-               phone2,
-               id_number,
-               active,
-               "address.address1",
-               "address.apt",
-               "time_created",
-               "created_by_id",
-               "address.address2",
-               "address.city",
-               "address.state",
-               "address.zipcode",
-               "address.country"
-        FROM vwcustomer_api
-        WHERE time_modified BETWEEN SYMMETRIC %s AND %s
-        ORDER BY time_modified ASC
+        SELECT c.id,
+               c.c_type AS "cus_type",
+               c.branch_id,
+               c.name,
+               c.phone1,
+               c.phone2,
+               c.id_number,
+               c.active,
+               c."address.address1",
+               c."address.apt",
+               c."time_created",
+               c."created_by_id",
+               c."address.address2",
+               c."address.city",
+               c."address.state",
+               c."address.zipcode",
+               c."address.country",
+               b.code AS branch_code,
+               b.name AS branch_name
+        FROM vwcustomer_api c
+        LEFT JOIN branch b ON b.id = c.branch_id
+        WHERE c.time_modified BETWEEN SYMMETRIC %s AND %s
+        ORDER BY c.time_modified ASC
         """
 
         if verbose:
@@ -158,7 +161,14 @@ def _flush_customer_batch(coll, batch, dry_run: bool, processed: int):
         requests.append(
             UpdateOne(
                 {"oldID": old_id},
-                {"$set": doc},
+                {
+                    "$set": doc,
+                    "$unset": {
+                        "phone1": "",
+                        "phone2": "",
+                        "createdByID": "",
+                    },
+                },
                 upsert=True,
             )
         )

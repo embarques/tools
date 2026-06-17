@@ -104,7 +104,11 @@ def upsert_income_statements(
                 )
             continue
         ops.append(
-            UpdateOne({"_id": doc["_id"]}, {"$set": doc}, upsert=True)
+            UpdateOne(
+                {"_id": doc["_id"]},
+                {"$set": doc},
+                upsert=True,
+            )
         )
 
     if not dry_run and ops:
@@ -189,7 +193,7 @@ def collect_income_statement_ids_from_journals(
     for journal_docs in journals_by_invoice.values():
         for doc in journal_docs:
             stmt = doc.get("incomeStatement") or {}
-            stmt_id = int(stmt.get("_id") or 0)
+            stmt_id = int(stmt.get("id") or stmt.get("_id") or 0)
             if stmt_id > 0:
                 ids.add(stmt_id)
     return sorted(ids)

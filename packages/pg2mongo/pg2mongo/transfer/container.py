@@ -215,7 +215,7 @@ def container_cmd(
             ops.append(
                 UpdateOne(
                     {"_id": doc["_id"]},
-                    {"$set": doc},
+                    {"$set": doc, "$unset": {"number": ""}},
                     upsert=True,
                 )
             )

@@ -107,7 +107,14 @@ def branch_cmd(
             ops.append(
                 UpdateOne(
                     {"_id": doc["_id"]},
-                    {"$set": doc},
+                    {
+                        "$set": doc,
+                        "$unset": {
+                            "phone1": "",
+                            "phone2": "",
+                            "created": "",
+                        },
+                    },
                     upsert=True,
                 )
             )
