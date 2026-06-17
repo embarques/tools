@@ -112,7 +112,7 @@ def branch_cmd(
                     hint += f" phones={len(doc.get('phones') or [])}"
                 progress.step(hint, emit=verbose)
 
-                if dry_run and progress.enabled(4):
+                if progress.enabled(4):
                     progress.secho(f"[branch] doc={doc!r}", fg="white")
 
                 ops.append(

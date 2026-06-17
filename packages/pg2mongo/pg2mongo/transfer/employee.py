@@ -111,7 +111,7 @@ def employee_cmd(
                     hint += f" branch={branch.get('code', '')} phones={len(doc.get('phones') or [])}"
                 progress.step(hint, emit=verbose)
 
-                if dry_run and progress.enabled(4):
+                if progress.enabled(4):
                     progress.secho(f"[employee] doc={doc!r}", fg="white")
 
                 ops.append(

@@ -107,7 +107,7 @@ def user_cmd(
                     hint += f" branch={branch.get('code', '')} active={doc.get('active')}"
                 progress.step(hint, emit=verbose)
 
-                if dry_run and progress.enabled(4):
+                if progress.enabled(4):
                     progress.secho(f"[user] doc={doc!r}", fg="white")
 
                 ops.append(

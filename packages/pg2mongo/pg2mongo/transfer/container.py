@@ -220,7 +220,7 @@ def container_cmd(
                     hint += f" containerNumber={doc.get('containerNumber', '')}"
                 progress.step(hint, emit=verbose)
 
-                if dry_run and progress.enabled(4):
+                if progress.enabled(4):
                     progress.secho(f"[container] doc={doc!r}", fg="white")
 
                 ops.append(

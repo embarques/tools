@@ -141,7 +141,7 @@ def delivery_cmd(
                     hint += f" employee={employee.get('name', '')} container={container.get('name', '')}"
                 progress.step(hint, emit=verbose)
 
-                if dry_run and progress.enabled(4):
+                if progress.enabled(4):
                     progress.secho(f"[delivery] doc={doc!r}", fg="white")
 
                 ops.append(
