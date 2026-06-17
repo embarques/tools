@@ -48,7 +48,7 @@ def income_statement_cmd(
     end_date: Optional[str],
     dry_run: bool,
     limit: int,
-    verbose: bool,
+    verbose: int,
 ):
     """Transfer income statements from Postgres ``income_statement`` to MongoDB."""
     verbose = resolve_verbose(ctx, verbose)
@@ -76,15 +76,7 @@ def income_statement_cmd(
         )
         progress.announce()
 
-        if dry_run and not verbose:
-            target = progress._target or 0
-            processed = min(target, limit) if limit else target
-            click.secho(
-                f"[DRY-RUN] would upsert {processed:,} document(s) into "
-                f"{cols.qualified(settings.mongo.db, cols.INCOME_STATEMENTS)}",
-                fg="yellow",
-            )
-        else:
+        with progress:
             processed = sync_income_statements_in_window(
                 pg_conn,
                 mongo_client,
@@ -94,11 +86,12 @@ def income_statement_cmd(
                 dry_run=dry_run,
                 verbose=verbose,
                 limit=limit,
+                progress=progress,
             )
 
         click.secho(
             f"✅ Income statement transfer complete. "
-            f"Processed {processed:,}/{progress._target or processed:,}, "
+            f"{progress.summary(dry_run=dry_run)}, "
             f"dry_run={dry_run}",
             fg="green",
         )

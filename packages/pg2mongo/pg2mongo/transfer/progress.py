@@ -42,15 +42,20 @@ class TransferProgress:
         label: str,
         total: Optional[int],
         limit: int = 0,
-        verbose: bool = False,
+        verbose: bool | int = False,
     ) -> None:
         self.label = label
         self.total = total
         self.limit = limit
-        self.verbose = verbose
+        self.verbosity = int(verbose)
+        self.verbose = self.verbosity > 0
         self.current = 0
         self._target = self._effective_target()
         self._bar: click.progressbar | None = None
+
+    def enabled(self, level: int = 1) -> bool:
+        """Return whether the requested verbosity level is enabled."""
+        return self.verbosity >= level
 
     def _effective_target(self) -> Optional[int]:
         if self.total is None:

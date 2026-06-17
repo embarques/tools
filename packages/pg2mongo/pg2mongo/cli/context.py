@@ -21,27 +21,37 @@ def get_config_path(ctx: click.Context) -> str | None:
 
 def get_verbose(ctx: click.Context) -> bool:
     """Return whether verbose mode is enabled anywhere in the Click context chain."""
+    return get_verbosity(ctx) > 0
+
+
+def get_verbosity(ctx: click.Context) -> int:
+    """Return the accumulated verbosity level from the Click context chain."""
+    level = 0
     current: click.Context | None = ctx
     while current is not None:
-        if current.obj and current.obj.get("verbose"):
-            return True
+        if current.obj:
+            value = current.obj.get("verbose", 0)
+            if isinstance(value, bool):
+                level += int(value)
+            else:
+                level += int(value or 0)
         current = current.parent
-    return False
+    return level
 
 
-def resolve_verbose(ctx: click.Context, verbose: bool) -> bool:
-    """Apply a command-level ``-v`` flag and return the effective verbose state."""
+def resolve_verbose(ctx: click.Context, verbose: int | bool) -> int:
+    """Apply a command-level ``-v`` flag and return the effective verbosity level."""
     if verbose:
         ctx.ensure_object(dict)
-        ctx.obj["verbose"] = True
-    return get_verbose(ctx)
+        ctx.obj["verbose"] = int(verbose)
+    return get_verbosity(ctx)
 
 
 def verbose_option(func: F) -> F:
-    """Click decorator: add ``-v / --verbose`` to a command."""
+    """Click decorator: add repeatable ``-v / --verbose`` to a command."""
     return click.option(
         "-v",
         "--verbose",
-        is_flag=True,
-        help="Enable verbose output.",
+        count=True,
+        help="Increase verbose output. Repeat for more detail, e.g. -vvvv.",
     )(func)

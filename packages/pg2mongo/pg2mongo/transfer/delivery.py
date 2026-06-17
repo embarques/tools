@@ -11,6 +11,7 @@ from pg2mongo import collections as cols
 from pg2mongo.clients import connect_postgres, connect_mongo
 from pg2mongo.cli.context import resolve_verbose, verbose_option
 from pg2mongo.transfer.common import resolve_settings_from_ctx, close_connections_safe
+from pg2mongo.transfer.progress import TransferProgress
 
 
 DELIVERY_SQL = """
@@ -65,7 +66,7 @@ def delivery_cmd(
     end_year: Optional[int],
     limit: Optional[int],
     dry_run: bool,
-    verbose: bool,
+    verbose: int,
 ):
     """
     Transfer delivery records from Postgres → MongoDB (deliveries collection).
@@ -120,25 +121,36 @@ def delivery_cmd(
                 msg += f" (limit={limit})"
             click.secho(msg, fg="cyan")
 
+        progress = TransferProgress(
+            label="Deliveries",
+            total=total_rows,
+            limit=limit or 0,
+            verbose=verbose,
+        )
+        progress.announce()
+
         # 3) Build bulk upsert operations
         ops: list[UpdateOne] = []
-        for idx, row in enumerate(rows, start=1):
-            doc = build_delivery_doc(row)
+        with progress:
+            for row in rows:
+                doc = build_delivery_doc(row)
+                hint = f"id={doc.get('_id')} name={doc.get('name')}"
+                if progress.enabled(2):
+                    employee = doc.get("employee") or {}
+                    container = doc.get("container") or {}
+                    hint += f" employee={employee.get('name', '')} container={container.get('name', '')}"
+                progress.step(hint, emit=verbose)
 
-            if dry_run and verbose:
-                click.secho(
-                    f"[deliveries] DRY-RUN {idx}/{len(rows)} "
-                    f"_id={doc['_id']} name={doc['name']}",
-                    fg="white",
-                )
+                if dry_run and progress.enabled(4):
+                    progress.secho(f"[delivery] doc={doc!r}", fg="white")
 
-            ops.append(
-                UpdateOne(
-                    {"_id": doc["_id"]},
-                    {"$set": doc},
-                    upsert=True,
+                ops.append(
+                    UpdateOne(
+                        {"_id": doc["_id"]},
+                        {"$set": doc},
+                        upsert=True,
+                    )
                 )
-            )
 
         if dry_run:
             click.secho(

@@ -19,7 +19,7 @@ from pg2mongo.sequences import ensure_counters
 @click.command("init-indexes")
 @verbose_option
 @click.pass_context
-def init_indexes_cmd(ctx: click.Context, verbose: bool):
+def init_indexes_cmd(ctx: click.Context, verbose: int):
     """
     Initialize Mongo indexes and seed counters collection.
     """

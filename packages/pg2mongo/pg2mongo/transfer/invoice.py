@@ -133,7 +133,7 @@ def invoice_cmd(
     end_date: Optional[str],
     dry_run: bool,
     limit: int,
-    verbose: bool,
+    verbose: int,
 ):
     """
     Main CLI command to transfer invoices from Postgres -> MongoDB.
@@ -229,7 +229,17 @@ def invoice_cmd(
 
                     doc = build_invoice_doc(row)
                     hint = f"oldID={doc.get('oldID')} number={doc.get('number')}"
+                    if progress.enabled(2):
+                        sender = doc.get("sender") or {}
+                        branch = doc.get("branch") or {}
+                        hint += (
+                            f" sender={sender.get('name', '')} "
+                            f"branch={branch.get('code', '')} balance={doc.get('balance')}"
+                        )
                     progress.step(hint, emit=verbose)
+
+                    if progress.enabled(4):
+                        progress.secho(f"[invoice] doc={doc!r}", fg="white")
 
                     _process_single_invoice(
                         pg_conn=pg_conn,

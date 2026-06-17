@@ -14,7 +14,7 @@ from pg2mongo.clients import connect_postgres, connect_mongo
 @click.command("test-connection")
 @verbose_option
 @click.pass_context
-def test_connection_cmd(ctx: click.Context, verbose: bool):
+def test_connection_cmd(ctx: click.Context, verbose: int):
     """
     Test and validate connection to Postgres and MongoDB.
     Prints connection status and database names.

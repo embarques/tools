@@ -10,6 +10,7 @@ from pg2mongo import collections as cols
 from pg2mongo.clients import connect_postgres, connect_mongo
 from pg2mongo.cli.context import resolve_verbose, verbose_option
 from pg2mongo.transfer.common import resolve_settings_from_ctx, close_connections_safe
+from pg2mongo.transfer.progress import TransferProgress
 
 
 USER_SQL = """
@@ -46,7 +47,7 @@ def user_cmd(
     ctx: click.Context,
     limit: Optional[int],
     dry_run: bool,
-    verbose: bool,
+    verbose: int,
 ):
     """
     Transfer user records from Postgres → MongoDB (users collection).
@@ -87,35 +88,46 @@ def user_cmd(
                 msg += f" (limit={limit})"
             click.secho(msg, fg="cyan")
 
+        progress = TransferProgress(
+            label="Users",
+            total=total_rows,
+            limit=limit or 0,
+            verbose=verbose,
+        )
+        progress.announce()
+
         # 3) Build bulk upsert operations
         ops: list[UpdateOne] = []
-        for idx, row in enumerate(rows, start=1):
-            doc = build_user_doc(row)
+        with progress:
+            for row in rows:
+                doc = build_user_doc(row)
+                branch = doc.get("branch") or {}
+                hint = f"id={doc.get('_id')} userName={doc.get('userName')}"
+                if progress.enabled(2):
+                    hint += f" branch={branch.get('code', '')} active={doc.get('active')}"
+                progress.step(hint, emit=verbose)
 
-            if dry_run and verbose:
-                click.secho(
-                    f"[users] DRY-RUN {idx}/{len(rows)} _id={doc['_id']} userName={doc['userName']}",
-                    fg="white",
-                )
+                if dry_run and progress.enabled(4):
+                    progress.secho(f"[user] doc={doc!r}", fg="white")
 
-            ops.append(
-                UpdateOne(
-                    {"_id": doc["_id"]},
-                    {
-                        "$set": doc,
-                        "$unset": {
-                            "name": "",
-                            "password": "",
-                            "startTime": "",
-                            "endTime": "",
-                            "createdById": "",
-                            "accessCode": "",
-                            "type": "",
+                ops.append(
+                    UpdateOne(
+                        {"_id": doc["_id"]},
+                        {
+                            "$set": doc,
+                            "$unset": {
+                                "name": "",
+                                "password": "",
+                                "startTime": "",
+                                "endTime": "",
+                                "createdById": "",
+                                "accessCode": "",
+                                "type": "",
+                            },
                         },
-                    },
-                    upsert=True,
+                        upsert=True,
+                    )
                 )
-            )
 
         if dry_run:
             click.secho(

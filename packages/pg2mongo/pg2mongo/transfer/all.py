@@ -55,10 +55,12 @@ def _build_invoke_kwargs(
     end_date: Optional[str],
     dry_run: bool,
     limit: int,
-    verbose: bool,
+    verbose: int,
 ) -> dict[str, Any]:
     optional_limit = _limit_for_optional(limit)
-    base = {"dry_run": dry_run, "verbose": verbose}
+    # Subcommands inherit verbosity from this Click context. Passing the
+    # effective level again would double-count parent + child verbosity.
+    base = {"dry_run": dry_run, "verbose": 0}
 
     if entity in {"branch", "employee", "user"}:
         return {"limit": optional_limit, **base}
@@ -158,7 +160,7 @@ def all_cmd(
     if limit:
         click.secho(f"  Limit: {limit} records per entity", fg="cyan")
     if verbose:
-        click.secho("  Verbose: on", fg="cyan")
+        click.secho(f"  Verbose level: {verbose}", fg="cyan")
 
     total_steps = len(TRANSFER_STEPS)
 

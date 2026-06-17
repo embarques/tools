@@ -36,11 +36,11 @@ from pg2mongo.transfer.all import all_cmd
 @click.option(
     "-v",
     "--verbose",
-    is_flag=True,
-    help="Enable verbose output.",
+    count=True,
+    help="Increase verbose output. Repeat for more detail, e.g. -vvvv.",
 )
 @click.pass_context
-def cli(ctx: click.Context, config_path: str | None, verbose: bool):
+def cli(ctx: click.Context, config_path: str | None, verbose: int):
     """
     Postgres → MongoDB transfer toolkit.
     """

@@ -29,7 +29,7 @@ def test_build_invoke_kwargs_invoice_includes_verbose():
         verbose=True,
     )
     assert kw["start_date"] == "2026-01-01"
-    assert kw["verbose"] is True
+    assert kw["verbose"] == 0
     assert kw["limit"] == 10
 
 

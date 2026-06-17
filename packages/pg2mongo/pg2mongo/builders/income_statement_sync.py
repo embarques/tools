@@ -7,6 +7,7 @@ from pymongo import UpdateOne
 
 from pg2mongo import collections as cols
 from pg2mongo.builders.income_statement_build import build_income_statement_doc
+from pg2mongo.transfer.progress import TransferProgress
 from pg2mongo.utils import pg_row_to_dict
 
 
@@ -86,6 +87,7 @@ def upsert_income_statements(
     *,
     dry_run: bool = False,
     verbose: bool = False,
+    progress: TransferProgress | None = None,
 ) -> int:
     """Upsert income statement documents; returns number processed."""
     coll = mongo_client[mongo_db_name][cols.INCOME_STATEMENTS]
@@ -95,13 +97,24 @@ def upsert_income_statements(
     for row in rows:
         doc = build_income_statement_doc(row)
         count += 1
+        if progress:
+            branch = doc.get("branch") or {}
+            hint = f"id={doc.get('_id')} date={doc.get('date')}"
+            if progress.enabled(2):
+                hint += f" branch={branch.get('code', '')} status={doc.get('status', '')}"
+            progress.step(hint, emit=verbose)
+            if progress.enabled(4):
+                progress.secho(f"[income_statement] doc={doc!r}", fg="white")
         if dry_run:
             if verbose:
-                click.secho(
+                msg = (
                     f"[dry-run] Would upsert income_statement _id={doc['_id']} "
-                    f"date={doc.get('date')} branch={doc.get('branch', {}).get('code')}",
-                    fg="yellow",
+                    f"date={doc.get('date')} branch={doc.get('branch', {}).get('code')}"
                 )
+                if progress:
+                    progress.secho(msg, fg="yellow")
+                else:
+                    click.secho(msg, fg="yellow")
             continue
         ops.append(
             UpdateOne(
@@ -114,11 +127,14 @@ def upsert_income_statements(
     if not dry_run and ops:
         coll.bulk_write(ops, ordered=False)
         if verbose:
-            click.secho(
+            msg = (
                 f"[income_statements] Upserted {len(ops)} document(s) into "
-                f"{cols.qualified(mongo_db_name, cols.INCOME_STATEMENTS)}",
-                fg="green",
+                f"{cols.qualified(mongo_db_name, cols.INCOME_STATEMENTS)}"
             )
+            if progress:
+                progress.secho(msg, fg="green")
+            else:
+                click.secho(msg, fg="green")
 
     return count
 
@@ -133,6 +149,7 @@ def sync_income_statements_in_window(
     dry_run: bool = False,
     verbose: bool = False,
     limit: int = 0,
+    progress: TransferProgress | None = None,
 ) -> int:
     rows = _fetch_rows(
         pg_conn, INCOME_STATEMENT_BY_WINDOW_SQL, (start_iso, end_iso)
@@ -152,6 +169,7 @@ def sync_income_statements_in_window(
         rows,
         dry_run=dry_run,
         verbose=verbose,
+        progress=progress,
     )
 
 
@@ -163,6 +181,7 @@ def sync_income_statements_by_ids(
     *,
     dry_run: bool = False,
     verbose: bool = False,
+    progress: TransferProgress | None = None,
 ) -> int:
     """Upsert specific income statements (e.g. referenced by journal rows)."""
     ids = sorted({int(i) for i in income_statement_ids if int(i) > 0})
@@ -183,6 +202,7 @@ def sync_income_statements_by_ids(
         rows,
         dry_run=dry_run,
         verbose=verbose,
+        progress=progress,
     )
 
 

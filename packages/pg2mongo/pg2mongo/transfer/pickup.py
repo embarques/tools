@@ -14,12 +14,19 @@ from pg2mongo.transfer.common import (
     get_date_window,
     close_connections_safe,
 )
+from pg2mongo.transfer.progress import TransferProgress, count_sql_rows
 from pg2mongo.builders.pickup_build import build_pickup_doc, format_pickup_verbose
 from pg2mongo.sequences import ensure_counters
 from pg2mongo.utils import get_next_sequence
 
 
 _BATCH_SIZE = 200
+
+PICKUP_COUNT_SQL = """
+SELECT COUNT(*)::bigint AS cnt
+FROM vwpickup_api
+WHERE pickup_modified BETWEEN SYMMETRIC %s AND %s
+"""
 
 
 @click.command("pickup")
@@ -50,7 +57,7 @@ def pickup_cmd(
     end_date: Optional[str],
     dry_run: bool,
     limit: int,
-    verbose: bool,
+    verbose: int,
 ):
     """
     Transfer pickups from Postgres vwpickup_api to Mongo pickups collection.
@@ -119,38 +126,57 @@ def pickup_cmd(
                 fg="cyan",
             )
 
+        total = count_sql_rows(pg_conn, PICKUP_COUNT_SQL, (start_iso, end_iso))
+        progress = TransferProgress(
+            label="Pickups",
+            total=total,
+            limit=limit,
+            verbose=verbose,
+        )
+        progress.announce()
+
         db = mongo_client[settings.mongo.db]
         coll = db[cols.PICKUPS]
         ensure_counters(db)
 
-        processed = 0
         batch_docs = []
 
         with pg_conn.cursor() as cur:
             cur.execute(sql, (start_iso, end_iso))
 
-            for row in cur:
-                processed += 1
-                if limit and processed > limit:
-                    break
+            with progress:
+                for row in cur:
+                    if limit and progress.current >= limit:
+                        break
 
-                doc = build_pickup_doc(row)
-                batch_docs.append(doc)
+                    doc = build_pickup_doc(row)
+                    sender = doc.get("sender") or {}
+                    hint = f"oldID={doc.get('oldID')} sender={sender.get('name', '')}"
+                    if progress.enabled(2):
+                        branch = doc.get("branch") or {}
+                        sector = doc.get("sector") or {}
+                        hint += f" branch={branch.get('code', '')} sector={sector.get('name', '')}"
+                    progress.step(hint, emit=verbose)
 
-                if len(batch_docs) >= _BATCH_SIZE:
-                    _flush_pickup_batch(
-                        db, coll, batch_docs, dry_run, processed, verbose=verbose
-                    )
-                    batch_docs.clear()
+                    if progress.enabled(4):
+                        progress.secho(f"[pickup] doc={doc!r}", fg="white")
 
-        if batch_docs:
-            _flush_pickup_batch(
-                db, coll, batch_docs, dry_run, processed, verbose=verbose
-            )
-            batch_docs.clear()
+                    batch_docs.append(doc)
+
+                    if len(batch_docs) >= _BATCH_SIZE:
+                        _flush_pickup_batch(
+                            db, coll, batch_docs, dry_run, progress.current, verbose=verbose
+                        )
+                        batch_docs.clear()
+
+            if batch_docs:
+                _flush_pickup_batch(
+                    db, coll, batch_docs, dry_run, progress.current, verbose=verbose
+                )
+                batch_docs.clear()
 
         click.secho(
-            f"✅ Pickup transfer complete. Processed={processed}, dry_run={dry_run}",
+            f"✅ Pickup transfer complete. {progress.summary(dry_run=dry_run)}, dry_run={dry_run}",
             fg="green",
         )
 

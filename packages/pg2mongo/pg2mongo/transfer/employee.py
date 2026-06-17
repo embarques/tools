@@ -10,6 +10,7 @@ from pg2mongo import collections as cols
 from pg2mongo.clients import connect_postgres, connect_mongo
 from pg2mongo.cli.context import resolve_verbose, verbose_option
 from pg2mongo.transfer.common import resolve_settings_from_ctx, close_connections_safe
+from pg2mongo.transfer.progress import TransferProgress
 
 
 EMPLOYEE_SQL = """
@@ -50,7 +51,7 @@ def employee_cmd(
     ctx: click.Context,
     limit: Optional[int],
     dry_run: bool,
-    verbose: bool,
+    verbose: int,
 ):
     """
     Transfer employee records from Postgres → MongoDB (employees collection).
@@ -91,30 +92,41 @@ def employee_cmd(
                 msg += f" (limit={limit})"
             click.secho(msg, fg="cyan")
 
+        progress = TransferProgress(
+            label="Employees",
+            total=total_rows,
+            limit=limit or 0,
+            verbose=verbose,
+        )
+        progress.announce()
+
         # 3) Build bulk upsert operations
         ops: list[UpdateOne] = []
-        for idx, row in enumerate(rows, start=1):
-            doc = build_employee_doc(row)
+        with progress:
+            for row in rows:
+                doc = build_employee_doc(row)
+                branch = doc.get("branch") or {}
+                hint = f"id={doc.get('_id')} name={doc.get('name')}"
+                if progress.enabled(2):
+                    hint += f" branch={branch.get('code', '')} phones={len(doc.get('phones') or [])}"
+                progress.step(hint, emit=verbose)
 
-            if dry_run and verbose:
-                click.secho(
-                    f"[employees] DRY-RUN {idx}/{len(rows)} _id={doc['_id']} name={doc['name']}",
-                    fg="white",
-                )
+                if dry_run and progress.enabled(4):
+                    progress.secho(f"[employee] doc={doc!r}", fg="white")
 
-            ops.append(
-                UpdateOne(
-                    {"_id": doc["_id"]},
-                    {
-                        "$set": doc,
-                        "$unset": {
-                            "phone1": "",
-                            "phone2": "",
+                ops.append(
+                    UpdateOne(
+                        {"_id": doc["_id"]},
+                        {
+                            "$set": doc,
+                            "$unset": {
+                                "phone1": "",
+                                "phone2": "",
+                            },
                         },
-                    },
-                    upsert=True,
+                        upsert=True,
+                    )
                 )
-            )
 
         if dry_run:
             click.secho(

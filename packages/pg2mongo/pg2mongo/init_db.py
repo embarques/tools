@@ -28,7 +28,7 @@ def init_db_cmd(
     ctx: click.Context,
     drop_existing: bool,
     dry_run: bool,
-    verbose: bool,
+    verbose: int,
 ) -> None:
     """Initialize MongoDB: ensure indexes and seed counters (idempotent)."""
     verbose = resolve_verbose(ctx, verbose)
