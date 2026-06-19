@@ -24,14 +24,14 @@ def test_build_invoice_doc_uses_new_reference_shape():
             "sender.id": 11,
             "sender.name": "Sender Co",
             "sender.cus_type": 0,
-            "sender.phone1": "+13055551000",
+            "sender.phone1": "305-555-1000",
             "sender.address.city": "Miami",
             "sender.address.state": "FL",
             "sender.address.zipcode": "33101",
             "receiver.id": 12,
             "receiver.name": "Receiver Co",
             "receiver.cus_type": 1,
-            "receiver.phone1": "+13055552000",
+            "receiver.phone1": "(305) 555-2000",
         }
     )
 
@@ -62,3 +62,18 @@ def test_build_invoice_doc_uses_new_reference_shape():
     assert "invoice_details" not in doc
     assert "user" not in doc
     assert "driver" not in doc
+
+
+def test_build_invoice_doc_normalizes_existing_country_code_phone():
+    doc = build_invoice_doc(
+        {
+            "id": 1002,
+            "sender.id": 11,
+            "sender.cus_type": 0,
+            "sender.phone1": "1 305 555 1000",
+        }
+    )
+
+    assert doc["sender"]["phones"] == [
+        {"type": "business", "number": "+13055551000", "isPrimary": True}
+    ]

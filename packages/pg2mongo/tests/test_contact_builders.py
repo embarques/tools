@@ -9,7 +9,7 @@ def test_build_customer_doc_uses_new_contact_shape():
             "name": "Acme Corp",
             "cus_type": 1,
             "phone1": "+12015550100",
-            "phone2": "555-0101",
+            "phone2": "305-555-0101",
             "id_number": "123456789",
             "active": True,
             "branch_id": 1,
@@ -27,7 +27,7 @@ def test_build_customer_doc_uses_new_contact_shape():
     assert doc["customerType"] == 2
     assert doc["phones"] == [
         {"type": "mobile", "number": "+12015550100", "isPrimary": True},
-        {"type": "business", "number": "555-0101"},
+        {"type": "business", "number": "+13055550101"},
     ]
     assert doc["email"] == ""
     assert doc["IDNumber"] == "123456789"

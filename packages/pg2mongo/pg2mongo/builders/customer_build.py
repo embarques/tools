@@ -3,14 +3,8 @@ from __future__ import annotations
 from typing import Dict, Any
 
 from pg2mongo.customer_types import mongo_customer_type
+from pg2mongo.phones import phone_doc
 from pg2mongo.utils import to_utc
-
-
-def _phone_doc(phone_type: str, number: str, *, is_primary: bool = False) -> Dict[str, Any]:
-    phone: Dict[str, Any] = {"type": phone_type, "number": number}
-    if is_primary:
-        phone["isPrimary"] = True
-    return phone
 
 
 def build_customer_doc(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -23,9 +17,9 @@ def build_customer_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     phone1 = row.get("phone1") or ""
     phone2 = row.get("phone2") or ""
     if phone1:
-        phones.append(_phone_doc("mobile", phone1, is_primary=True))
+        phones.append(phone_doc("mobile", phone1, is_primary=True))
     if phone2:
-        phones.append(_phone_doc("business", phone2))
+        phones.append(phone_doc("business", phone2))
 
     doc: Dict[str, Any] = {
         "oldID": int(row["id"]),

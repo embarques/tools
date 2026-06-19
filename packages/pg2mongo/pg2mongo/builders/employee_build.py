@@ -2,12 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
-def _phone_doc(phone_type: str, number: str, *, is_primary: bool = False) -> Dict[str, Any]:
-    phone: Dict[str, Any] = {"type": phone_type, "number": number}
-    if is_primary:
-        phone["isPrimary"] = True
-    return phone
+from pg2mongo.phones import phone_doc
 
 
 def build_employee_doc(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -27,7 +22,7 @@ def build_employee_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         "name": row.get("name") or "",
         "title": row.get("title") or "",
         "department": row.get("department") or "",
-        "phones": [_phone_doc("mobile", phone1, is_primary=True)] if phone1 else [],
+        "phones": [phone_doc("mobile", phone1, is_primary=True)] if phone1 else [],
         "email": row.get("email") or "",
         "active": True,  # default; change if you add an active field in SQL
         "address": address,
