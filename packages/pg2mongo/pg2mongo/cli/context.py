@@ -27,9 +27,15 @@ def get_verbose(ctx: click.Context) -> bool:
 def get_verbosity(ctx: click.Context) -> int:
     """Return the accumulated verbosity level from the Click context chain."""
     level = 0
+    seen_obj_ids: set[int] = set()
     current: click.Context | None = ctx
     while current is not None:
         if current.obj:
+            obj_id = id(current.obj)
+            if obj_id in seen_obj_ids:
+                current = current.parent
+                continue
+            seen_obj_ids.add(obj_id)
             value = current.obj.get("verbose", 0)
             if isinstance(value, bool):
                 level += int(value)

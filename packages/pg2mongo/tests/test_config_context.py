@@ -49,6 +49,16 @@ def test_get_verbosity_accumulates_parent_and_child_counts():
     assert get_verbose(child) is True
 
 
+def test_get_verbosity_does_not_double_count_shared_context_object():
+    parent = click.Context(click.Command("root"))
+    parent.obj = {"verbose": 2}
+
+    child = click.Context(click.Command("child"), parent=parent)
+    child.obj = parent.obj
+
+    assert get_verbosity(child) == 2
+
+
 def test_all_subcommands_accept_verbose_flag():
     from click.testing import CliRunner
     from pg2mongo.transfer.pickup import pickup_cmd
