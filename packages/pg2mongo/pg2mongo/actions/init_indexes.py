@@ -90,6 +90,9 @@ def init_indexes_cmd(ctx: click.Context, verbose: int):
         # Cities
         create_unique_index(db, cols.CITIES, {"name": 1})
 
+        # Invoice line-item catalog (lookup)
+        create_unique_index(db, cols.INVOICE_DESCRIPTIONS, {"name": 1})
+
         # Pickups (unique by date + sender.name + sender.address.address1)
         create_unique_index(
             db,

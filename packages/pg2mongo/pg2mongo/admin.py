@@ -48,6 +48,7 @@ def ensure_business_indexes(db: Database, *, drop_existing: bool = False) -> Non
     create_unique_index(db, cols.ROLES, [("name", ASCENDING)], drop_existing=drop_existing)
     create_unique_index(db, cols.PERMISSIONS, [("name", ASCENDING)], drop_existing=drop_existing)
     create_unique_index(db, cols.CITIES, [("name", ASCENDING)], drop_existing=drop_existing)
+    create_unique_index(db, cols.INVOICE_DESCRIPTIONS, [("name", ASCENDING)], drop_existing=drop_existing)
     create_unique_index(db, cols.PICKUPS, [("date", ASCENDING), ("sender.name", ASCENDING), ("sender.address.address1", ASCENDING)], drop_existing=drop_existing)
 
     for cname in (cols.ACTIVITY_LOGS, cols.INVOICE_DETAILS, cols.JOURNALS, cols.COUNTERS):

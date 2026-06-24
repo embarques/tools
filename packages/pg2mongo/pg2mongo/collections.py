@@ -23,6 +23,7 @@ INCOME_STATEMENTS = "income_statements"
 ROLES = "roles"
 PERMISSIONS = "permissions"
 CITIES = "cities"
+INVOICE_DESCRIPTIONS = "invoice_descriptions"
 ACTIVITY_LOG = "activity_log"
 # Backward-compatible alias (deprecated)
 ACTIVITY_LOGS = ACTIVITY_LOG
