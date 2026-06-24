@@ -21,6 +21,7 @@ def test_build_invoice_doc_uses_new_reference_shape():
             "recharge": 0,
             "paid_region": "",
             "paid_status": "PARTIAL",
+            "registration": "completed",
             "sender.id": 11,
             "sender.name": "Sender Co",
             "sender.cus_type": 0,
@@ -35,36 +36,37 @@ def test_build_invoice_doc_uses_new_reference_shape():
         }
     )
 
-    assert doc["branch"] == {"id": 1, "code": "NYC"}
-    assert doc["container"] == {"id": 2, "name": "Container A"}
+    assert doc["branch"] == {"_id": 1, "code": "NYC"}
+    assert doc["container"] == {"_id": 2, "name": "Container A"}
+    assert doc["user"] == {"_id": 9, "userName": "tasador1", "fullName": "tasador1"}
     assert doc["employee"] == {
-        "id": 5,
+        "_id": 5,
         "name": "Tasador",
-        "userName": "tasador1",
         "fullName": "Tasador",
     }
-    assert doc["sender"]["id"] == 11
+    assert doc["sender"]["oldID"] == 11
     assert doc["sender"]["customerType"] == 1
-    assert doc["sender"]["phones"] == [
-        {"type": "business", "number": "+13055551000", "isPrimary": True}
-    ]
+    assert doc["sender"]["phone1"] == "305-555-1000"
     assert doc["sender"]["address"] == {
+        "address1": "",
+        "address2": "",
+        "apartment": "",
         "city": "Miami",
         "state": "FL",
         "zipcode": "33101",
+        "country": "",
     }
-    assert doc["receiver"]["id"] == 12
+    assert doc["receiver"]["oldID"] == 12
     assert doc["receiver"]["customerType"] == 2
-    assert doc["receiver"]["phones"] == [
-        {"type": "mobile", "number": "+13055552000", "isPrimary": True}
-    ]
+    assert doc["receiver"]["phone1"] == "(305) 555-2000"
     assert doc["invoiceDetails"] == []
+    assert doc["registration"] == "completed"
+    assert doc["isVoid"] is False
     assert "invoice_details" not in doc
-    assert "user" not in doc
     assert "driver" not in doc
 
 
-def test_build_invoice_doc_normalizes_existing_country_code_phone():
+def test_build_invoice_doc_keeps_raw_phone_strings():
     doc = build_invoice_doc(
         {
             "id": 1002,
@@ -74,6 +76,4 @@ def test_build_invoice_doc_normalizes_existing_country_code_phone():
         }
     )
 
-    assert doc["sender"]["phones"] == [
-        {"type": "business", "number": "+13055551000", "isPrimary": True}
-    ]
+    assert doc["sender"]["phone1"] == "1 305 555 1000"

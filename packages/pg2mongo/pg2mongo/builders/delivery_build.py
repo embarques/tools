@@ -2,50 +2,40 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from pg2mongo.builders.embedded import container_snapshot, employee_snapshot
 from pg2mongo.utils import to_utc
 
 
 def build_delivery_doc(row: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Map a Postgres delivery row from vwdelivery_api into the MongoDB delivery document.
-
-    Expected row keys from SQL:
-      id, gen_num, delivery_date, delivery_number,
-      container_id, container_designation,
-      employee_id, employee_name,
-      helper1_id, helper1_name, helper2_id, helper2_name
-    """
-
-    # Container subdocument
-    container: Dict[str, Any] | None = None
+    """Map a Postgres delivery row from vwdelivery_api into the deliveries document."""
+    container = None
     if row.get("container_id"):
-        container = {
-            "id": row.get("container_id"),
-            "name": row.get("container_designation") or "",
-            "containerNumber": row.get("container_number") or "",
-        }
+        container = container_snapshot(
+            row.get("container_id"),
+            name=row.get("container_designation") or "",
+            container_number=row.get("container_number") or "",
+        )
 
-    # Employee subdocs
-    employee: Dict[str, Any] | None = None
+    employee = None
     if row.get("employee_id"):
-        employee = {
-            "id": row.get("employee_id"),
-            "name": row.get("employee_name") or "",
-        }
+        employee = employee_snapshot(
+            row.get("employee_id"),
+            name=row.get("employee_name") or "",
+        )
 
-    helper1: Dict[str, Any] | None = None
+    helper1 = None
     if row.get("helper1_id"):
-        helper1 = {
-            "id": row.get("helper1_id"),
-            "name": row.get("helper1_name") or "",
-        }
+        helper1 = employee_snapshot(
+            row.get("helper1_id"),
+            name=row.get("helper1_name") or "",
+        )
 
-    helper2: Dict[str, Any] | None = None
+    helper2 = None
     if row.get("helper2_id"):
-        helper2 = {
-            "id": row.get("helper2_id"),
-            "name": row.get("helper2_name") or "",
-        }
+        helper2 = employee_snapshot(
+            row.get("helper2_id"),
+            name=row.get("helper2_name") or "",
+        )
 
     delivery_dt = to_utc(row.get("delivery_date"))
 

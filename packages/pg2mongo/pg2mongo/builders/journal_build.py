@@ -6,10 +6,10 @@ from pg2mongo.utils import decimal_to_float, to_utc
 
 # Postgres account_chart_id → Mongo accounts[0] (legacy app IDs from Go importer)
 _ACCOUNT_CHART_MONGO: dict[int, dict[str, Any]] = {
-    1: {"id": 1, "name": "CASH ON HAND", "type": "Asset"},
-    2: {"id": 3, "name": "ACCOUNTS RECEIVABLE", "type": "Asset"},
-    6: {"id": 5, "name": "SALES", "type": "Revenue"},
-    18: {"id": 4, "name": "SALES DISCOUNTS", "type": "Revenue"},
+    1: {"_id": 1, "name": "CASH ON HAND", "type": "ASSET"},
+    2: {"_id": 3, "name": "ACCOUNTS RECEIVABLE", "type": "ASSET"},
+    6: {"_id": 5, "name": "SALES", "type": "REVENUE"},
+    18: {"_id": 4, "name": "SALES DISCOUNTS", "type": "CONTRA-REVENUE"},
 }
 
 
@@ -23,9 +23,9 @@ def _build_account(row: Dict[str, Any]) -> Dict[str, Any]:
         account = dict(base)
     else:
         account = {
-            "id": chart_id,
+            "_id": chart_id,
             "name": row.get("account_chart_name") or row.get("account_chart_description") or "",
-            "type": row.get("account_type") or "",
+            "type": (row.get("account_type") or "").upper().replace(" ", "-"),
         }
 
     if credit > 0:
@@ -36,37 +36,45 @@ def _build_account(row: Dict[str, Any]) -> Dict[str, Any]:
     return account
 
 
+def _transaction_amount(row: Dict[str, Any]) -> float:
+    credit = decimal_to_float(row.get("credit") or 0)
+    debit = decimal_to_float(row.get("debit") or 0)
+    return credit if credit > 0 else debit
+
+
 def build_journal_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     """
     Map a ``vwgeneral_journal`` row into a MongoDB journal document.
 
-    ``invoice._id`` is set later when the parent invoice is written.
+    ``invoice._id`` and ``customer._id`` are set later when the parent invoice is written.
     """
     payment_type = row.get("payment_method_payment_type") or "CASH"
     payment_method_id = int(row.get("payment_method_id") or 0)
+    income_statement_id = int(row.get("income_statement_id") or 0)
 
     doc: Dict[str, Any] = {
-        "oldID": int(row["id"]),
         "description": row.get("trans_description") or "",
         "date": to_utc(row.get("trans_date")),
         "createdAt": to_utc(row.get("time_created")),
         "updatedAt": to_utc(row.get("time_modified")),
-        "transactionID": int(row.get("transaction_id") or 0),
-        "user": {"id": int(row.get("created_by_id") or 0)},
+        "transactionId": int(row.get("transaction_id") or 0),
+        "user": {"_id": int(row.get("created_by_id") or 0)},
         "refNumber": row.get("ref_number") or "",
         "paymentMethod": {
-            "id": payment_method_id,
+            "_id": payment_method_id,
             "name": payment_type,
         },
-        "incomeStatement": {
-            "id": int(row.get("income_statement_id") or 0),
-            "rate": decimal_to_float(row.get("rate")),
-            "branch": {"id": int(row.get("branch_id") or 0)},
-        },
-        "customer": {"oldID": int(row.get("customer_id") or 0)},
+        "incomeStatement": {"_id": income_statement_id},
         "transactionBalance": decimal_to_float(row.get("open_balance_temp")),
+        "transactionAmount": _transaction_amount(row),
         "transactionType": row.get("transaction_type_description") or "",
         "accounts": [_build_account(row)],
+        # Internal idempotency key (not part of app read model; stripped before write if needed)
+        "_pgJournalId": int(row["id"]),
     }
+
+    customer_id = int(row.get("customer_id") or 0)
+    if customer_id > 0:
+        doc["_pgCustomerId"] = customer_id
 
     return doc

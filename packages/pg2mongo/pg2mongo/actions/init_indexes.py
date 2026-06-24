@@ -51,13 +51,23 @@ def init_indexes_cmd(ctx: click.Context, verbose: int):
         create_unique_index(db, cols.BRANCHES, {"name": 1})
 
         # Customers
-        create_unique_index(db, cols.CUSTOMERS, {"name": 1, "phones.number": 1})
+        create_unique_index(db, cols.CUSTOMERS, {"name": 1, "phone1": 1})
 
         # Invoices
         create_unique_index(db, cols.INVOICES, {"number": 1})
 
         # Journals (natural key from Postgres general_journal.id)
-        create_unique_index(db, cols.JOURNALS, {"oldID": 1})
+        create_unique_index(
+            db,
+            cols.JOURNALS,
+            {
+                "transactionId": 1,
+                "refNumber": 1,
+                "incomeStatement._id": 1,
+                "invoice._id": 1,
+                "accounts._id": 1,
+            },
+        )
 
         # Users
         create_unique_index(db, cols.USERS, {"userName": 1, "roles": 1})

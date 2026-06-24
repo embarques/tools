@@ -33,7 +33,10 @@ def test_build_income_statement_doc():
 
     assert doc["_id"] == 42
     assert doc["branch"]["code"] == "TN"
+    assert doc["branch"]["_id"] == 1
     assert doc["status"] == "CLOSED"
     assert doc["summaryTotal"]["invoices"] == 100.0
-    assert doc["summaryTotal"]["accountsTranfer"] == 0.0
-    assert doc["supervisor"]["id"] == 5
+    assert doc["summaryTotal"]["accountsTransfer"] == 0.0
+    assert doc["user"]["_id"] == 5
+    assert doc["user"]["fullName"] == "Supervisor"
+    assert "supervisor" not in doc

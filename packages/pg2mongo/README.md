@@ -19,18 +19,44 @@ clean, incremental, and developer-friendly way.
 | `transfer pickup` | `vwpickup_api` | `pickups` |
 | `transfer user` | `auth_user` + `user_profile` | `users` |
 
-## Collection naming
+## Naming conventions
 
-Multi-word MongoDB collection names use **snake_case**. Constants live in `pg2mongo/collections.py`:
+pg2mongo follows the legacy **Go / MongoDB app** naming split:
 
-| Collection / field | Name |
+| Layer | Style | Examples |
+|-------|--------|----------|
+| **Collection names** | lowercase; multi-word uses **snake_case** | `invoices`, `invoice_details`, `income_statements` |
+| **Field names inside documents** | **camelCase** (from Go `bson` tags) | `oldID`, `createdAt`, `customerType`, `userName`, `invoiceDetails` |
+
+Constants live in `pg2mongo/collections.py`. Collection names and document field names are **not** the same thing — e.g. line items live in the `invoice_details` collection but an invoice document references them via the `invoiceDetails` field.
+
+### Collections (snake_case when multi-word)
+
+| Collection | Name |
 |------------|------|
-| Invoice line items (collection) | `invoice_details` |
-| Invoice detail refs (field on invoice doc) | `invoice_details` |
-| Activity logs | `activity_logs` |
+| Invoice line items | `invoice_details` |
 | Income statements | `income_statements` |
+| Activity logs | `activity_logs` |
 
 Single-word collections (`invoices`, `customers`, `pickups`, etc.) stay lowercase without underscores.
+
+### Document fields (camelCase)
+
+Match the Go models’ `bson:"..."` tags so the API and existing Mongo data stay compatible. Common patterns:
+
+| Field | Notes |
+|-------|--------|
+| `oldID` | Postgres primary key stored on migrated docs |
+| `createdAt`, `updatedAt` | timestamps |
+| `customerType` | sender/receiver type |
+| `userName`, `fullName` | user fields |
+| `invoiceDetails` | array of refs on invoice docs (not `invoice_details`) |
+| `incomeStatement`, `paymentMethod`, `refNumber` | journal / accounting |
+| `summaryTotal`, `otherIncomes`, `accountReceivables` | income statement |
+
+Nested refs often use `_id` (Mongo) or `id` depending on the Go struct — follow the builder for each entity rather than inventing new keys.
+
+When adding a field, check the corresponding Go `bson` tag in the emsys API models; do **not** use snake_case for document properties.
 
 ---
 

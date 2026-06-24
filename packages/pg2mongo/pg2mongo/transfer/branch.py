@@ -109,7 +109,7 @@ def branch_cmd(
                 doc = build_branch_doc(row)
                 hint = f"id={doc.get('_id')} code={doc.get('code')} name={doc.get('name')}"
                 if progress.enabled(2):
-                    hint += f" phones={len(doc.get('phones') or [])}"
+                    hint += f" phone1={doc.get('phone1', '')}"
                 progress.step(hint, emit=verbose)
 
                 if progress.enabled(4):

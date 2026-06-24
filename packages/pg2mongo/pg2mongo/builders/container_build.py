@@ -18,6 +18,7 @@ def build_container_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         "_id": row["id"],
         "name": row.get("designation") or "",
         "booking": row.get("booking_number") or "",
+        "seal": row.get("seal") or "",
         "containerNumber": row.get("container_number") or "",
         "sealNumber": row.get("seal_number") or "",
         "broker": row.get("broker") or "",

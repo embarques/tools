@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from pg2mongo.builders.embedded import branch_dto
 from pg2mongo.utils import to_utc
 
 
@@ -13,14 +14,14 @@ def build_user_doc(row: Dict[str, Any]) -> Dict[str, Any]:
       id, username, full_name, time_created,
       register_key, temp_key, branch_id
     """
-    branch_id = row.get("branch_id") or 0
     branch = None
+    branch_id = row.get("branch_id") or 0
     if branch_id:
-        branch = {
-            "id": int(branch_id),
-            "name": row.get("branch_name") or "",
-            "code": row.get("branch_code") or "",
-        }
+        branch = branch_dto(
+            branch_id,
+            name=row.get("branch_name") or "",
+            code=row.get("branch_code") or "",
+        )
 
     doc: Dict[str, Any] = {
         "_id": row["id"],

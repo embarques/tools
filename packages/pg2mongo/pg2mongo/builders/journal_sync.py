@@ -55,9 +55,7 @@ def load_journals_by_invoice(
     *,
     verbose: bool = False,
 ) -> Dict[int, List[Dict[str, Any]]]:
-    """
-    Load journal rows for the invoice date window, grouped by Postgres ``invoice_id``.
-    """
+    """Load journal rows for the invoice date window, grouped by Postgres ``invoice_id``."""
     journals: Dict[int, List[Dict[str, Any]]] = {}
 
     with pg_conn.cursor() as cur:
@@ -80,13 +78,42 @@ def load_journals_by_invoice(
     return journals
 
 
+def _resolve_customer_ref(
+    mongo_client,
+    mongo_db_name: str,
+    pg_customer_id: int,
+    session=None,
+) -> Dict[str, Any] | None:
+    if pg_customer_id <= 0:
+        return None
+
+    customer = mongo_client[mongo_db_name][cols.CUSTOMERS].find_one(
+        {"oldID": pg_customer_id},
+        {"_id": 1, "name": 1},
+        session=session,
+    )
+    if not customer:
+        return None
+
+    ref: Dict[str, Any] = {"_id": customer["_id"]}
+    if customer.get("name"):
+        ref["name"] = customer["name"]
+    return ref
+
+
 def upsert_invoice_journals(
     mongo_client,
     mongo_db_name: str,
     invoice_id: ObjectId,
     journal_docs: List[Dict[str, Any]],
-    session=None,
     *,
+    invoice_number: str = "",
+    invoice_cost: float = 0.0,
+    invoice_payment: float = 0.0,
+    invoice_balance: float = 0.0,
+    invoice_discount: float = 0.0,
+    invoice_surcharge: float = 0.0,
+    session=None,
     verbose: bool = False,
 ) -> int:
     """Upsert journal documents for one invoice (same Mongo transaction as the invoice)."""
@@ -96,13 +123,44 @@ def upsert_invoice_journals(
     coll = mongo_client[mongo_db_name][cols.JOURNALS]
     written = 0
 
+    invoice_ref: Dict[str, Any] = {
+        "_id": invoice_id,
+        "number": invoice_number,
+        "cost": invoice_cost,
+        "payment": invoice_payment,
+        "balance": invoice_balance,
+        "discount": invoice_discount,
+        "surcharge": invoice_surcharge,
+    }
+
     for template in journal_docs:
         doc = dict(template)
-        doc["invoice"] = {"id": invoice_id}
-        old_id = doc["oldID"]
+        pg_journal_id = doc.pop("_pgJournalId", None)
+        pg_customer_id = doc.pop("_pgCustomerId", None)
+
+        doc["invoice"] = invoice_ref
+
+        if pg_customer_id:
+            customer_ref = _resolve_customer_ref(
+                mongo_client,
+                mongo_db_name,
+                int(pg_customer_id),
+                session=session,
+            )
+            if customer_ref:
+                doc["customer"] = customer_ref
+
+        account_id = (doc.get("accounts") or [{}])[0].get("_id")
+        upsert_filter = {
+            "transactionId": doc.get("transactionId"),
+            "refNumber": doc.get("refNumber"),
+            "incomeStatement._id": doc.get("incomeStatement", {}).get("_id"),
+            "invoice._id": invoice_id,
+            "accounts._id": account_id,
+        }
 
         coll.update_one(
-            {"oldID": old_id},
+            upsert_filter,
             {"$set": doc},
             upsert=True,
             session=session,
@@ -112,8 +170,8 @@ def upsert_invoice_journals(
         if verbose:
             account = (doc.get("accounts") or [{}])[0]
             click.secho(
-                f"[journal] upserted oldID={old_id} "
-                f"account={account.get('name', '')}",
+                f"[journal] upserted transactionId={doc.get('transactionId')} "
+                f"pgId={pg_journal_id} account={account.get('name', '')}",
                 fg="blue",
             )
 

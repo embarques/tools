@@ -108,7 +108,7 @@ def employee_cmd(
                 branch = doc.get("branch") or {}
                 hint = f"id={doc.get('_id')} name={doc.get('name')}"
                 if progress.enabled(2):
-                    hint += f" branch={branch.get('code', '')} phones={len(doc.get('phones') or [])}"
+                    hint += f" branch={branch.get('code', '')} phone1={doc.get('phone1', '')}"
                 progress.step(hint, emit=verbose)
 
                 if progress.enabled(4):

@@ -1,72 +1,91 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
+from pg2mongo.builders.embedded import branch_dto, container_snapshot, employee_snapshot, user_snapshot
 from pg2mongo.utils import decimal_to_float, to_utc
 
 
-def _optional_ref(
-    entity_id: Any,
-    name: str | None = None,
-) -> Optional[Dict[str, Any]]:
-    ref_id = int(entity_id or 0)
-    if ref_id <= 0:
-        return None
-    ref: Dict[str, Any] = {"id": ref_id}
-    if name:
-        ref["name"] = name
-    return ref
+def _zero_summary_defaults() -> Dict[str, float]:
+    return {
+        "invoices": 0.0,
+        "receipts": 0.0,
+        "invoicePayments": 0.0,
+        "receiptPayments": 0.0,
+        "otherIncomes": 0.0,
+        "cash": 0.0,
+        "deposits": 0.0,
+        "check": 0.0,
+        "zelle": 0.0,
+        "creditCards": 0.0,
+        "expenses": 0.0,
+        "accountReceivables": 0.0,
+        "discounts": 0.0,
+        "accountsTransfer": 0.0,
+        "loans": 0.0,
+        "totalIncome": 0.0,
+        "totalGeneral": 0.0,
+        "totalCash": 0.0,
+        "netIncome": 0.0,
+    }
 
 
 def build_income_statement_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     """
     Map a Postgres ``income_statement`` row (with optional joins) to MongoDB.
 
-    Mongo ``_id`` is the Postgres ``income_statement.id`` (numeric), matching the
-    legacy Go importer and ``journal.incomeStatement._id`` references.
+    Mongo ``_id`` is the Postgres ``income_statement.id`` (uint32).
     """
-    branch_id = int(row.get("branch_id") or 0)
-    branch: Dict[str, Any] = {"id": branch_id}
-    if row.get("branch_code"):
-        branch["code"] = row["branch_code"]
-    if row.get("branch_name"):
-        branch["name"] = row["branch_name"]
-
-    doc: Dict[str, Any] = {
-        "_id": int(row["id"]),
-        "date": to_utc(row.get("stmt_date")),
-        "branch": branch,
-        "rate": decimal_to_float(row.get("rate")),
-        "currency": row.get("currency") or "",
-        "status": row.get("state") or "",
-        "summaryTotal": {
+    summary = _zero_summary_defaults()
+    summary.update(
+        {
             "invoices": decimal_to_float(row.get("invoice_total")),
             "receipts": decimal_to_float(row.get("receipt_total")),
             "otherIncomes": decimal_to_float(row.get("other_incomes")),
             "expenses": decimal_to_float(row.get("expenses")),
             "accountReceivables": decimal_to_float(row.get("account_receivable")),
             "discounts": decimal_to_float(row.get("discounts")),
-            # Legacy BSON key spelling from Go models
-            "accountsTranfer": decimal_to_float(row.get("accounts_transfer")),
+            "accountsTransfer": decimal_to_float(row.get("accounts_transfer")),
             "loans": decimal_to_float(row.get("loans")),
-        },
+        }
+    )
+
+    doc: Dict[str, Any] = {
+        "_id": int(row["id"]),
+        "date": to_utc(row.get("stmt_date")),
+        "branch": branch_dto(
+            row.get("branch_id"),
+            name=row.get("branch_name") or "",
+            code=row.get("branch_code") or "",
+        ),
+        "rate": decimal_to_float(row.get("rate")),
+        "currency": row.get("currency") or "",
+        "status": row.get("state") or "",
+        "summaryTotal": summary,
         "createdAt": to_utc(row.get("time_created")),
         "updatedAt": to_utc(row.get("time_modified")),
     }
 
-    supervisor = _optional_ref(row.get("supervisor_id"), row.get("supervisor_name"))
-    if supervisor:
-        doc["supervisor"] = supervisor
-
-    container = _optional_ref(
-        row.get("container_id"),
-        row.get("container_designation"),
+    user = user_snapshot(
+        row.get("supervisor_id"),
+        name=row.get("supervisor_name") or "",
+        fullName=row.get("supervisor_name") or "",
     )
-    if container:
+    if user.get("_id", 0) > 0:
+        doc["user"] = user
+
+    container = container_snapshot(
+        row.get("container_id"),
+        name=row.get("container_designation") or "",
+    )
+    if container.get("_id", 0) > 0:
         doc["container"] = container
 
-    delivery = _optional_ref(row.get("delivery_id"), row.get("delivery_number"))
-    if delivery:
-        doc["delivery"] = delivery
+    delivery_id = int(row.get("delivery_id") or 0)
+    if delivery_id > 0:
+        doc["delivery"] = {
+            "_id": delivery_id,
+            "name": row.get("delivery_number") or "",
+        }
 
     return doc

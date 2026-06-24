@@ -62,6 +62,7 @@ SELECT v.id,
        v.payment,
        v.discount,
        v.recharge,
+       v.registration,
 
        v."sender.id",
        v."sender.cus_type",
@@ -331,9 +332,9 @@ def _process_single_invoice(
                 {
                     "$set": doc,
                     "$unset": {
-                        "user": "",
                         "driver": "",
                         "invoice_details": "",
+                        "phones": "",
                     },
                 },
                 upsert=True,
@@ -369,6 +370,7 @@ def _process_single_invoice(
                 mongo_db_name=mongo_db_name,
                 invoice_old_id=old_id,
                 invoice_id=invoice_id,
+                invoice_number=number or "",
                 session=sess,
                 verbose=verbose,
             )
@@ -378,6 +380,12 @@ def _process_single_invoice(
                 mongo_db_name,
                 invoice_id,
                 journal_docs,
+                invoice_number=number or "",
+                invoice_cost=doc.get("cost") or 0.0,
+                invoice_payment=doc.get("payment") or 0.0,
+                invoice_balance=doc.get("balance") or 0.0,
+                invoice_discount=doc.get("discount") or 0.0,
+                invoice_surcharge=doc.get("surcharge") or 0.0,
                 session=sess,
                 verbose=verbose,
             )

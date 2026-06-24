@@ -10,7 +10,7 @@ def test_format_pickup_verbose_line():
         "date": datetime(2026, 3, 15, tzinfo=timezone.utc),
         "sender": {
             "name": "Maria Lopez",
-            "phones": [{"type": "mobile", "number": "809-555-1234", "isPrimary": True}],
+            "phone1": "809-555-1234",
             "address": {"city": "Santiago"},
         },
     }

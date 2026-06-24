@@ -42,8 +42,8 @@ def build_invoice_detail_doc(detail_id: int, rec: Dict[str, Any]) -> Dict[str, A
 
     doc: Dict[str, Any] = {
         "_id": ObjectId(),
-        "oldID": detail_id,
-        "name": rec.get("description"),
+        "name": rec.get("description") or "",
+        "description": rec.get("description") or "",
         "quantity": rec.get("quantity"),
         "labels": rec.get("labels"),
         "price": to_float(rec.get("price")),
@@ -77,7 +77,7 @@ def build_barcode_doc(rec: Dict[str, Any]) -> Dict[str, Any] | None:
     # gen_num / id → barcode _id (column name varies by Postgres view version)
     gen_id = _safe_int(rec.get("barcode.gen_num") or rec.get("barcode.id"))
     if gen_id > 0:
-        barcode["id"] = gen_id
+        barcode["_id"] = gen_id
 
     # scanDate: only accept real datetime, not a literal string
     scan_date = rec.get("barcode.scandate")
@@ -88,7 +88,7 @@ def build_barcode_doc(rec: Dict[str, Any]) -> Dict[str, Any] | None:
     status_id = _safe_int(rec.get("barcode.status_id"))
     if status_id > 0:
         barcode["status"] = {
-            "id": status_id,
+            "_id": status_id,
             "name": rec.get("barcode.status_name") or "",
         }
 
@@ -96,7 +96,7 @@ def build_barcode_doc(rec: Dict[str, Any]) -> Dict[str, Any] | None:
     container_id = _safe_int(rec.get("barcode.container_id"))
     if container_id > 0:
         barcode["container"] = {
-            "id": container_id,
+            "_id": container_id,
             "name": rec.get("barcode.container_name") or "",
         }
 
@@ -104,7 +104,7 @@ def build_barcode_doc(rec: Dict[str, Any]) -> Dict[str, Any] | None:
     delivery_id = _safe_int(rec.get("barcode.delivery_id"))
     if delivery_id > 0:
         barcode["delivery"] = {
-            "id": delivery_id,
+            "_id": delivery_id,
             "name": rec.get("barcode.delivery_name") or "",
         }
 
@@ -235,6 +235,8 @@ def add_invoice_details(
     mongo_db_name: str,
     invoice_old_id: int,
     invoice_id: ObjectId,
+    *,
+    invoice_number: str = "",
     session=None,
     verbose: bool = False,
 ) -> List[Dict[str, Any]]:
@@ -260,7 +262,7 @@ def add_invoice_details(
 
     # Remove previously synced details so re-runs replace rather than duplicate
     inv_details_collection.delete_many(
-        {"$or": [{"invoice.id": invoice_id}, {"invoice._id": invoice_id}]},
+        {"$or": [{"invoice._id": invoice_id}, {"invoice.id": invoice_id}]},
         session=session,
     )
 
@@ -283,8 +285,8 @@ def add_invoice_details(
     # 2) Attach invoice reference to each detail
     for d in details:
         d["invoice"] = {
-            "id": invoice_id,
-            "oldID": invoice_old_id,
+            "_id": invoice_id,
+            "number": invoice_number,
         }
 
     if verbose:
@@ -302,7 +304,7 @@ def add_invoice_details(
 
     # 4) Build reference list and update parent invoice
     inv_details_refs: List[Dict[str, Any]] = [
-        {"id": str(oid)} for oid in insert_result.inserted_ids
+        {"_id": oid} for oid in insert_result.inserted_ids
     ]
 
     inv_collection.update_one(

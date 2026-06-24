@@ -1,7 +1,10 @@
 """
 MongoDB collection names and related document field names.
 
-Multi-word names use snake_case to match the database.
+Naming split (matches the Go / Mongo app):
+  - **Collections**: lowercase; multi-word → snake_case (``invoice_details``).
+  - **Document fields**: camelCase from Go ``bson`` tags (``createdAt``, ``oldID``,
+    ``invoiceDetails``, ``customerType``, etc.).
 """
 
 # Collections (single-word names stay lowercase without underscores)
@@ -20,7 +23,9 @@ INCOME_STATEMENTS = "income_statements"
 ROLES = "roles"
 PERMISSIONS = "permissions"
 CITIES = "cities"
-ACTIVITY_LOGS = "activity_logs"
+ACTIVITY_LOG = "activity_log"
+# Backward-compatible alias (deprecated)
+ACTIVITY_LOGS = ACTIVITY_LOG
 JOURNALS = "journals"
 
 # Invoice document field holding references to invoice_details documents

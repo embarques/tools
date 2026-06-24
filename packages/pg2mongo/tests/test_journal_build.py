@@ -29,10 +29,13 @@ def test_build_journal_doc_maps_account_chart_and_amounts():
 
     doc = build_journal_doc(row)
 
-    assert doc["oldID"] == 99
+    assert doc["_pgJournalId"] == 99
     assert doc["description"] == "Payment"
-    assert doc["accounts"][0]["id"] == 1
+    assert doc["accounts"][0]["_id"] == 1
     assert doc["accounts"][0]["name"] == "CASH ON HAND"
     assert doc["accounts"][0]["credit"] == 150.5
-    assert doc["incomeStatement"]["id"] == 10
-    assert doc["customer"]["oldID"] == 42
+    assert doc["incomeStatement"] == {"_id": 10}
+    assert doc["transactionId"] == 7
+    assert doc["transactionAmount"] == 150.5
+    assert doc["_pgCustomerId"] == 42
+    assert "oldID" not in doc

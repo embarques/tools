@@ -131,8 +131,7 @@ def customer_cmd(
                     hint = f"oldID={doc.get('oldID')} name={doc.get('name')}"
                     if verbosity >= 2:
                         branch = doc.get("branch") or {}
-                        phones = doc.get("phones") or []
-                        primary_phone = phones[0].get("number", "") if phones else ""
+                        primary_phone = doc.get("phone1") or ""
                         hint += (
                             f" type={doc.get('customerType')} "
                             f"phone={primary_phone} branch={branch.get('code', '')}"
@@ -224,9 +223,7 @@ def _flush_customer_batch(
                 {
                     "$set": doc,
                     "$unset": {
-                        "phone1": "",
-                        "phone2": "",
-                        "createdByID": "",
+                        "phones": "",
                     },
                 },
                 upsert=True,
