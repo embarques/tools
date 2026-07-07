@@ -7,6 +7,7 @@ from bson import ObjectId
 
 from pg2mongo import collections as cols
 from pg2mongo.builders.journal_build import build_journal_doc
+from pg2mongo.customer_lookup import find_customer_in_mongo
 from pg2mongo.utils import pg_row_to_dict
 
 
@@ -79,6 +80,7 @@ def load_journals_by_invoice(
 
 
 def _resolve_customer_ref(
+    pg_conn,
     mongo_client,
     mongo_db_name: str,
     pg_customer_id: int,
@@ -87,21 +89,24 @@ def _resolve_customer_ref(
     if pg_customer_id <= 0:
         return None
 
-    customer = mongo_client[mongo_db_name][cols.CUSTOMERS].find_one(
-        {"oldID": pg_customer_id},
-        {"_id": 1, "name": 1},
+    customer = find_customer_in_mongo(
+        mongo_client,
+        mongo_db_name,
+        pg_conn,
+        pg_customer_id,
         session=session,
     )
     if not customer:
         return None
 
-    ref: Dict[str, Any] = {"_id": customer["_id"]}
+    ref: Dict[str, Any] = {"id": customer["_id"]}
     if customer.get("name"):
         ref["name"] = customer["name"]
     return ref
 
 
 def upsert_invoice_journals(
+    pg_conn,
     mongo_client,
     mongo_db_name: str,
     invoice_id: ObjectId,
@@ -124,7 +129,7 @@ def upsert_invoice_journals(
     written = 0
 
     invoice_ref: Dict[str, Any] = {
-        "_id": invoice_id,
+        "id": invoice_id,
         "number": invoice_number,
         "cost": invoice_cost,
         "payment": invoice_payment,
@@ -142,6 +147,7 @@ def upsert_invoice_journals(
 
         if pg_customer_id:
             customer_ref = _resolve_customer_ref(
+                pg_conn,
                 mongo_client,
                 mongo_db_name,
                 int(pg_customer_id),
@@ -150,18 +156,21 @@ def upsert_invoice_journals(
             if customer_ref:
                 doc["customer"] = customer_ref
 
-        account_id = (doc.get("accounts") or [{}])[0].get("_id")
+        account_id = (doc.get("accounts") or [{}])[0].get("id")
         upsert_filter = {
             "transactionId": doc.get("transactionId"),
             "refNumber": doc.get("refNumber"),
-            "incomeStatement._id": doc.get("incomeStatement", {}).get("_id"),
-            "invoice._id": invoice_id,
-            "accounts._id": account_id,
+            "incomeStatement.id": doc.get("incomeStatement", {}).get("id"),
+            "invoice.id": invoice_id,
+            "accounts.id": account_id,
         }
 
         coll.update_one(
             upsert_filter,
-            {"$set": doc},
+            {
+                "$set": doc,
+                "$unset": {"oldID": ""},
+            },
             upsert=True,
             session=session,
         )

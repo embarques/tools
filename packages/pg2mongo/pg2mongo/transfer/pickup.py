@@ -18,6 +18,7 @@ from pg2mongo.transfer.progress import TransferProgress, count_sql_rows
 from pg2mongo.builders.pickup_build import build_pickup_doc, format_pickup_verbose
 from pg2mongo.sequences import ensure_counters
 from pg2mongo.utils import get_next_sequence
+from pg2mongo.match_keys import pickup_match_filter
 
 
 _BATCH_SIZE = 200
@@ -149,9 +150,10 @@ def pickup_cmd(
                     if limit and progress.current >= limit:
                         break
 
+                    pg_id = int(row["id"])
                     doc = build_pickup_doc(row)
                     sender = doc.get("sender") or {}
-                    hint = f"oldID={doc.get('oldID')} sender={sender.get('name', '')}"
+                    hint = f"pg={pg_id} sender={sender.get('name', '')}"
                     if progress.enabled(2):
                         branch = doc.get("branch") or {}
                         sector = doc.get("sector") or {}
@@ -196,12 +198,7 @@ def _flush_pickup_batch(
     if dry_run:
         if verbose:
             for doc in docs:
-                old_id = doc.get("oldID")
-                exists = (
-                    coll.find_one({"oldID": old_id}, {"_id": 1}) is not None
-                    if old_id is not None
-                    else False
-                )
+                exists = coll.find_one(pickup_match_filter(doc), {"_id": 1}) is not None
                 action = "would update" if exists else "would new"
                 click.secho(format_pickup_verbose(doc, action=action), fg="yellow")
         else:
@@ -216,13 +213,12 @@ def _flush_pickup_batch(
     from datetime import datetime, timezone
 
     for doc in docs:
-        old_id = doc.get("oldID")
-        if old_id is None:
-            click.secho("[warn] pickup missing oldID; skipping", fg="yellow")
+        match = pickup_match_filter(doc)
+        if not match.get("sender.name"):
+            click.secho("[warn] pickup missing sender name; skipping", fg="yellow")
             continue
 
-        # Keep existing Mongo _id on re-sync; assign via counter only for new pickups
-        existing = coll.find_one({"oldID": old_id}, {"_id": 1})
+        existing = coll.find_one(match, {"_id": 1})
         if existing:
             doc["_id"] = existing["_id"]
         else:
@@ -230,7 +226,7 @@ def _flush_pickup_batch(
                 doc["_id"] = get_next_sequence(db, "pickup_id")
             except Exception as exc:
                 click.secho(
-                    f"❌ Failed to get next pickup_id for oldID={old_id}: {exc}",
+                    f"❌ Failed to get next pickup_id for sender={match.get('sender.name')}: {exc}",
                     fg="red",
                 )
                 continue
@@ -240,10 +236,11 @@ def _flush_pickup_batch(
 
         requests.append(
             UpdateOne(
-                {"oldID": old_id},
+                match,
                 {
                     "$set": doc,
                     "$unset": {
+                        "oldID": "",
                         "user": "",
                     },
                 },

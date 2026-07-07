@@ -71,20 +71,20 @@ def build_income_statement_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         name=row.get("supervisor_name") or "",
         fullName=row.get("supervisor_name") or "",
     )
-    if user.get("_id", 0) > 0:
+    if user.get("id", 0) > 0:
         doc["user"] = user
 
     container = container_snapshot(
         row.get("container_id"),
         name=row.get("container_designation") or "",
     )
-    if container.get("_id", 0) > 0:
+    if container.get("id", 0) > 0:
         doc["container"] = container
 
     delivery_id = int(row.get("delivery_id") or 0)
     if delivery_id > 0:
         doc["delivery"] = {
-            "_id": delivery_id,
+            "id": delivery_id,
             "name": row.get("delivery_number") or "",
         }
 

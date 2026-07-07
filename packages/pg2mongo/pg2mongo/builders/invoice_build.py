@@ -16,7 +16,6 @@ from pg2mongo.utils import to_utc, decimal_to_float
 def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     """Build a Mongo invoice document from a vwinvoice_api row."""
     doc: Dict[str, Any] = {
-        "oldID": int(row["id"]),
         "number": row.get("number") or "",
         "createdAt": to_utc(row.get("time_created")),
         "updatedAt": to_utc(row.get("time_modified")),
@@ -52,11 +51,23 @@ def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         cols.INVOICE_DETAILS_FIELD: [],
     }
 
-    sender = customer_snapshot(row, "sender", default_customer_type=SENDER)
+    sender = customer_snapshot(
+        row,
+        "sender",
+        default_customer_type=SENDER,
+        primary_phone_type="business",
+        secondary_phone_type="business",
+    )
     if sender:
         doc["sender"] = sender
 
-    receiver = customer_snapshot(row, "receiver", default_customer_type=RECEIVER)
+    receiver = customer_snapshot(
+        row,
+        "receiver",
+        default_customer_type=RECEIVER,
+        primary_phone_type="mobile",
+        secondary_phone_type="home",
+    )
     if receiver:
         doc["receiver"] = receiver
 

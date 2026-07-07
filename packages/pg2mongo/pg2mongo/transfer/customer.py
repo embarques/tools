@@ -14,7 +14,9 @@ from pg2mongo.transfer.common import (
     close_connections_safe,
 )
 from pg2mongo.transfer.progress import TransferProgress, count_sql_rows
+from pg2mongo.builders.contacts import primary_phone_number
 from pg2mongo.builders.customer_build import build_customer_doc
+from pg2mongo.match_keys import customer_match_filter
 
 
 _BATCH_SIZE = 500
@@ -127,11 +129,12 @@ def customer_cmd(
                     if limit and progress.current >= limit:
                         break
 
+                    pg_id = int(row["id"])
                     doc = build_customer_doc(row)
-                    hint = f"oldID={doc.get('oldID')} name={doc.get('name')}"
+                    hint = f"pg={pg_id} name={doc.get('name')}"
                     if verbosity >= 2:
                         branch = doc.get("branch") or {}
-                        primary_phone = doc.get("phone1") or ""
+                        primary_phone = primary_phone_number(doc.get("phones") or [])
                         hint += (
                             f" type={doc.get('customerType')} "
                             f"phone={primary_phone} branch={branch.get('code', '')}"
@@ -184,12 +187,12 @@ def _flush_customer_batch(
     progress: TransferProgress | None = None,
 ):
     """
-    Upsert customers by oldID.
+    Upsert customers by natural key (Postgres id is used only in-process, not stored).
     """
     if dry_run:
         if verbose:
             for doc in batch:
-                msg = f"[dry-run] Would upsert customer oldID={doc.get('oldID')} name={doc.get('name')}"
+                msg = f"[dry-run] Would upsert customer name={doc.get('name')}"
                 if progress:
                     progress.secho(msg, fg="yellow")
                 else:
@@ -205,11 +208,9 @@ def _flush_customer_batch(
     from pymongo import UpdateOne
 
     for doc in batch:
-        old_id = doc.get("oldID")
-        if old_id is None:
-            click.secho(
-                "[warn] customer missing oldID; skipping", fg="yellow"
-            )
+        match = customer_match_filter(doc)
+        if not doc.get("name"):
+            click.secho("[warn] customer missing name; skipping", fg="yellow")
             continue
 
         # Always update updatedAt on write
@@ -219,11 +220,15 @@ def _flush_customer_batch(
 
         requests.append(
             UpdateOne(
-                {"oldID": old_id},
+                match,
                 {
                     "$set": doc,
                     "$unset": {
-                        "phones": "",
+                        "oldID": "",
+                        "address": "",
+                        "phone1": "",
+                        "phone2": "",
+                        "createdByID": "",
                     },
                 },
                 upsert=True,

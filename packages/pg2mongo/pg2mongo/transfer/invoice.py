@@ -29,6 +29,7 @@ from pg2mongo.transfer.common import (
     close_connections_safe,
 )
 from pg2mongo.transfer.progress import TransferProgress, count_sql_rows
+from pg2mongo.match_keys import invoice_match_filter
 from pg2mongo.cli.context import resolve_verbose, verbose_option
 
 
@@ -229,7 +230,8 @@ def invoice_cmd(
                         break
 
                     doc = build_invoice_doc(row)
-                    hint = f"oldID={doc.get('oldID')} number={doc.get('number')}"
+                    pg_invoice_id = int(row["id"])
+                    hint = f"pg={pg_invoice_id} number={doc.get('number')}"
                     if progress.enabled(2):
                         sender = doc.get("sender") or {}
                         branch = doc.get("branch") or {}
@@ -289,25 +291,25 @@ def _process_single_invoice(
     """
 
     doc = build_invoice_doc(row)
-    old_id = doc.get("oldID")
+    pg_invoice_id = int(row["id"])
     number = doc.get("number")
 
-    if old_id is None:
-        progress.secho("invoice missing oldID; skipping", fg="yellow")
+    if not number:
+        progress.secho("invoice missing number; skipping", fg="yellow")
         return
 
-    journal_docs = journals_by_invoice.get(int(old_id), [])
+    journal_docs = journals_by_invoice.get(pg_invoice_id, [])
 
     doc["updatedAt"] = datetime.now(timezone.utc)
 
     if dry_run:
-        details = load_invoice_details(pg_conn, old_id, verbose=verbose)
+        details = load_invoice_details(pg_conn, pg_invoice_id, verbose=verbose)
         detail_count = len(details)
         barcode_count = sum(len(d.get("barcodes", [])) for d in details)
 
         if verbose:
             progress.secho(
-                f"[dry-run] Would upsert invoice oldID={old_id}, number={number}",
+                f"[dry-run] Would upsert invoice pg={pg_invoice_id}, number={number}",
                 fg="yellow",
             )
             progress.secho(
@@ -327,14 +329,18 @@ def _process_single_invoice(
     with mongo_client.start_session() as session:
 
         def txn_ops(sess):
+            match = invoice_match_filter(doc)
             result = invoices_coll.update_one(
-                {"oldID": old_id},
+                match,
                 {
                     "$set": doc,
                     "$unset": {
+                        "oldID": "",
                         "driver": "",
                         "invoice_details": "",
-                        "phones": "",
+                        "address": "",
+                        "phone1": "",
+                        "phone2": "",
                     },
                 },
                 upsert=True,
@@ -346,13 +352,13 @@ def _process_single_invoice(
                 inserted = True
             else:
                 existing = invoices_coll.find_one(
-                    {"oldID": old_id},
+                    match,
                     {"_id": 1},
                     session=sess,
                 )
                 if not existing:
                     raise RuntimeError(
-                        f"Invoice oldID={old_id} not found after upsert."
+                        f"Invoice number={number} not found after upsert."
                     )
                 invoice_id = existing["_id"]
                 inserted = False
@@ -360,7 +366,7 @@ def _process_single_invoice(
             if verbose:
                 action = "inserted" if inserted else "updated"
                 progress.secho(
-                    f"[invoice] Header {action}: _id={invoice_id}, oldID={old_id}",
+                    f"[invoice] Header {action}: _id={invoice_id}, number={number}",
                     fg="blue",
                 )
 
@@ -368,7 +374,7 @@ def _process_single_invoice(
                 pg_conn=pg_conn,
                 mongo_client=mongo_client,
                 mongo_db_name=mongo_db_name,
-                invoice_old_id=old_id,
+                invoice_old_id=pg_invoice_id,
                 invoice_id=invoice_id,
                 invoice_number=number or "",
                 session=sess,
@@ -376,6 +382,7 @@ def _process_single_invoice(
             )
 
             upsert_invoice_journals(
+                pg_conn,
                 mongo_client,
                 mongo_db_name,
                 invoice_id,
@@ -394,17 +401,17 @@ def _process_single_invoice(
             session.with_transaction(txn_ops)
             if verbose:
                 progress.secho(
-                    f"[ok] Invoice oldID={old_id} fully committed "
+                    f"[ok] Invoice number={number} fully committed "
                     f"(header + details + {len(journal_docs)} journal(s))",
                     fg="green",
                 )
         except PyMongoError as exc:
             click.secho(
-                f"❌ MongoDB error migrating invoice oldID={old_id}: {exc}",
+                f"❌ MongoDB error migrating invoice number={number}: {exc}",
                 fg="red",
             )
         except Exception as exc:
             click.secho(
-                f"❌ Unexpected error migrating invoice oldID={old_id}: {exc}",
+                f"❌ Unexpected error migrating invoice number={number}: {exc}",
                 fg="red",
             )

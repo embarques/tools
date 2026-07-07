@@ -11,6 +11,7 @@ from pg2mongo import collections as cols
 from pg2mongo.builders.city_build import build_city_doc
 from pg2mongo.builders.invoice_description_build import build_invoice_description_doc
 from pg2mongo.sequences import ensure_counter
+from pg2mongo.transfer.progress import TransferProgress
 from pg2mongo.utils import pg_row_to_dict
 
 
@@ -113,6 +114,15 @@ def sync_counter_from_collection(
     return max_id
 
 
+def _progress_label(spec: TableImportSpec) -> str:
+    """Human-readable label for the transfer progress bar."""
+    labels = {
+        "city": "Cities",
+        "invoice_description": "Invoice descriptions",
+    }
+    return labels.get(spec.pg_table, spec.mongo_collection.replace("_", " ").title())
+
+
 def fetch_rows(pg_conn, sql: str) -> list[dict[str, Any]]:
     with pg_conn.cursor() as cur:
         cur.execute(sql)
@@ -127,38 +137,41 @@ def import_table(
     *,
     dry_run: bool = False,
     limit: int | None = None,
-    verbose: bool = False,
+    verbose: bool | int = False,
 ) -> dict[str, int]:
     """Import one Postgres table into its Mongo collection."""
     rows = fetch_rows(pg_conn, spec.sql)
+    total_rows = len(rows)
     if limit is not None:
         rows = rows[:limit]
 
-    if verbose:
-        click.secho(
-            f"[{spec.pg_table}] Loaded {len(rows)} row(s) from Postgres",
-            fg="cyan",
-        )
-
-    if not rows:
+    if total_rows == 0:
         click.secho(f"[{spec.pg_table}] No rows to import.", fg="yellow")
         return {"matched": 0, "modified": 0, "upserted": 0}
 
+    progress = TransferProgress(
+        label=_progress_label(spec),
+        total=total_rows,
+        limit=limit or 0,
+        verbose=verbose,
+    )
+    progress.announce()
+
     ops: list[UpdateOne] = []
-    for row in rows:
-        doc = spec.build_doc(row)
-        if verbose:
-            click.secho(
-                f"[{spec.pg_table}] _id={doc.get('_id')} name={doc.get('name', '')!r}",
-                fg="blue",
+    with progress:
+        for row in rows:
+            doc = spec.build_doc(row)
+            hint = f"_id={doc.get('_id')} name={doc.get('name', '')!r}"
+            progress.step(hint, emit=bool(verbose))
+            if progress.enabled(4):
+                progress.secho(f"[{spec.pg_table}] doc={doc!r}", fg="white")
+            ops.append(
+                UpdateOne(
+                    {"_id": doc["_id"]},
+                    {"$set": doc},
+                    upsert=True,
+                )
             )
-        ops.append(
-            UpdateOne(
-                {"_id": doc["_id"]},
-                {"$set": doc},
-                upsert=True,
-            )
-        )
 
     if dry_run:
         click.secho(
@@ -178,6 +191,12 @@ def import_table(
                 f"[{spec.pg_table}] Counter {spec.counter_name} synced to >= {max_id}",
                 fg="cyan",
             )
+
+    click.secho(
+        f"{progress.summary(dry_run=False)} → matched={result.matched_count} "
+        f"modified={result.modified_count} upserted={len(result.upserted_ids)}",
+        fg="green",
+    )
 
     return {
         "matched": result.matched_count,

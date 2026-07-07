@@ -77,7 +77,7 @@ def build_barcode_doc(rec: Dict[str, Any]) -> Dict[str, Any] | None:
     # gen_num / id → barcode _id (column name varies by Postgres view version)
     gen_id = _safe_int(rec.get("barcode.gen_num") or rec.get("barcode.id"))
     if gen_id > 0:
-        barcode["_id"] = gen_id
+        barcode["id"] = gen_id
 
     # scanDate: only accept real datetime, not a literal string
     scan_date = rec.get("barcode.scandate")
@@ -88,7 +88,7 @@ def build_barcode_doc(rec: Dict[str, Any]) -> Dict[str, Any] | None:
     status_id = _safe_int(rec.get("barcode.status_id"))
     if status_id > 0:
         barcode["status"] = {
-            "_id": status_id,
+            "id": status_id,
             "name": rec.get("barcode.status_name") or "",
         }
 
@@ -96,7 +96,7 @@ def build_barcode_doc(rec: Dict[str, Any]) -> Dict[str, Any] | None:
     container_id = _safe_int(rec.get("barcode.container_id"))
     if container_id > 0:
         barcode["container"] = {
-            "_id": container_id,
+            "id": container_id,
             "name": rec.get("barcode.container_name") or "",
         }
 
@@ -104,7 +104,7 @@ def build_barcode_doc(rec: Dict[str, Any]) -> Dict[str, Any] | None:
     delivery_id = _safe_int(rec.get("barcode.delivery_id"))
     if delivery_id > 0:
         barcode["delivery"] = {
-            "_id": delivery_id,
+            "id": delivery_id,
             "name": rec.get("barcode.delivery_name") or "",
         }
 
@@ -262,7 +262,7 @@ def add_invoice_details(
 
     # Remove previously synced details so re-runs replace rather than duplicate
     inv_details_collection.delete_many(
-        {"$or": [{"invoice._id": invoice_id}, {"invoice.id": invoice_id}]},
+        {"$or": [{"invoice.id": invoice_id}, {"invoice._id": invoice_id}]},
         session=session,
     )
 
@@ -285,7 +285,7 @@ def add_invoice_details(
     # 2) Attach invoice reference to each detail
     for d in details:
         d["invoice"] = {
-            "_id": invoice_id,
+            "id": invoice_id,
             "number": invoice_number,
         }
 
@@ -304,7 +304,7 @@ def add_invoice_details(
 
     # 4) Build reference list and update parent invoice
     inv_details_refs: List[Dict[str, Any]] = [
-        {"_id": oid} for oid in insert_result.inserted_ids
+        {"id": oid} for oid in insert_result.inserted_ids
     ]
 
     inv_collection.update_one(

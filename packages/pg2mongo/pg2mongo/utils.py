@@ -78,7 +78,7 @@ def create_unique_index(database: Database, collection_name: str, keys: dict) ->
     Create a unique index on the given collection.
 
     Example:
-        create_unique_index(db, "customers", {"name": 1, "phone1": 1})
+        create_unique_index(db, "customers", {"name": 1, "phones.number": 1})
     """
     coll = database[collection_name]
     coll.create_index(list(keys.items()), unique=True)

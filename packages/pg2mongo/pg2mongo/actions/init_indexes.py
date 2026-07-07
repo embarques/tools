@@ -51,7 +51,7 @@ def init_indexes_cmd(ctx: click.Context, verbose: int):
         create_unique_index(db, cols.BRANCHES, {"name": 1})
 
         # Customers
-        create_unique_index(db, cols.CUSTOMERS, {"name": 1, "phone1": 1})
+        create_unique_index(db, cols.CUSTOMERS, {"name": 1, "phones.number": 1})
 
         # Invoices
         create_unique_index(db, cols.INVOICES, {"number": 1})
@@ -63,9 +63,9 @@ def init_indexes_cmd(ctx: click.Context, verbose: int):
             {
                 "transactionId": 1,
                 "refNumber": 1,
-                "incomeStatement._id": 1,
-                "invoice._id": 1,
-                "accounts._id": 1,
+                "incomeStatement.id": 1,
+                "invoice.id": 1,
+                "accounts.id": 1,
             },
         )
 
@@ -93,11 +93,11 @@ def init_indexes_cmd(ctx: click.Context, verbose: int):
         # Invoice line-item catalog (lookup)
         create_unique_index(db, cols.INVOICE_DESCRIPTIONS, {"name": 1})
 
-        # Pickups (unique by date + sender.name + sender.address.address1)
+        # Pickups (unique by date + sender.name + primary address line)
         create_unique_index(
             db,
             cols.PICKUPS,
-            {"date": 1, "sender.name": 1, "sender.address.address1": 1},
+            {"date": 1, "sender.name": 1, "sender.addresses.address1": 1},
         )
 
         click.secho("✅ Mongo index initialization complete.", fg="green")

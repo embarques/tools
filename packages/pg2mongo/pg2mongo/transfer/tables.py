@@ -72,11 +72,10 @@ def tables_cmd(
                 limit=limit,
                 verbose=verbose,
             )
-            if not dry_run:
+            if dry_run and stats["upserted"]:
                 click.secho(
-                    f"[{spec.pg_table}] Done → matched={stats['matched']} "
-                    f"modified={stats['modified']} upserted={stats['upserted']}",
-                    fg="green",
+                    f"[{spec.pg_table}] {stats['upserted']} document(s) would be upserted",
+                    fg="yellow",
                 )
 
         click.secho("\n✅ Table import complete.", fg="green", bold=True)

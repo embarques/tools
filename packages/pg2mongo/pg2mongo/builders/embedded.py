@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from pg2mongo.builders.contacts import (
+    customer_addresses_from_legacy,
+    phones_from_legacy,
+    primary_phone_number,
+)
 from pg2mongo.customer_types import mongo_customer_type
 
 
@@ -20,7 +25,7 @@ def branch_dto(
     name: str = "",
     code: str = "",
 ) -> dict[str, Any]:
-    ref: dict[str, Any] = {"_id": safe_int(branch_id)}
+    ref: dict[str, Any] = {"id": safe_int(branch_id)}
     if name:
         ref["name"] = name
     if code:
@@ -29,7 +34,7 @@ def branch_dto(
 
 
 def address_from_row(row: Mapping[str, Any], prefix: str = "address.") -> dict[str, Any]:
-    """Build an embedded Address from flattened Postgres/view columns."""
+    """Build a singular embedded address (employees, branches — not customers)."""
     apt_key = f"{prefix}apt" if f"{prefix}apt" in row else f"{prefix}apartment"
     return {
         "address1": row.get(f"{prefix}address1") or "",
@@ -37,7 +42,7 @@ def address_from_row(row: Mapping[str, Any], prefix: str = "address.") -> dict[s
         "apartment": row.get(apt_key) or "",
         "city": row.get(f"{prefix}city") or "",
         "state": row.get(f"{prefix}state") or "",
-        "zipcode": row.get(f"{prefix}zipcode") or "",
+        "zipcode": row.get(f"{prefix}zipcode") or row.get(f"{prefix}zipCode") or "",
         "country": row.get(f"{prefix}country") or "",
     }
 
@@ -50,7 +55,7 @@ def user_snapshot(
     fullName: str = "",
     email: str = "",
 ) -> dict[str, Any]:
-    ref: dict[str, Any] = {"_id": safe_int(user_id)}
+    ref: dict[str, Any] = {"id": safe_int(user_id)}
     if name:
         ref["name"] = name
     if userName:
@@ -65,7 +70,7 @@ def user_snapshot(
 
 
 def employee_snapshot(employee_id: Any, *, name: str = "") -> dict[str, Any]:
-    ref: dict[str, Any] = {"_id": safe_int(employee_id)}
+    ref: dict[str, Any] = {"id": safe_int(employee_id)}
     if name:
         ref["name"] = name
     return ref
@@ -77,7 +82,7 @@ def container_snapshot(
     name: str = "",
     container_number: str = "",
 ) -> dict[str, Any]:
-    ref: dict[str, Any] = {"_id": safe_int(container_id)}
+    ref: dict[str, Any] = {"id": safe_int(container_id)}
     if name:
         ref["name"] = name
     if container_number:
@@ -90,8 +95,10 @@ def customer_snapshot(
     prefix: str,
     *,
     default_customer_type: int,
+    primary_phone_type: str = "mobile",
+    secondary_phone_type: str = "home",
 ) -> dict[str, Any] | None:
-    """Embedded Customer snapshot (pickups, invoices)."""
+    """Embedded customer snapshot (pickups, invoices) in API shape."""
     party_id = safe_int(row.get(f"{prefix}.id"), default=-1)
     if party_id <= 0:
         return None
@@ -103,16 +110,26 @@ def customer_snapshot(
         else default_customer_type
     )
 
+    phones = phones_from_legacy(
+        row.get(f"{prefix}.phone1"),
+        row.get(f"{prefix}.phone2"),
+        primary_type=primary_phone_type,
+        secondary_type=secondary_phone_type,
+    )
+    legacy_address = address_from_row(row, prefix=f"{prefix}.address.")
+    addresses = customer_addresses_from_legacy(
+        legacy_address,
+        primary_phone=primary_phone_number(phones),
+    )
+
     doc: dict[str, Any] = {
-        "oldID": party_id,
         "name": row.get(f"{prefix}.name") or "",
         "customerType": customer_type,
-        "phone1": row.get(f"{prefix}.phone1") or "",
-        "phone2": row.get(f"{prefix}.phone2") or "",
+        "phones": phones,
+        "addresses": addresses,
         "email": row.get(f"{prefix}.email") or "",
         "IDNumber": row.get(f"{prefix}.id_number") or "",
         "active": True,
-        "address": address_from_row(row, prefix=f"{prefix}.address."),
     }
 
     branch_id = safe_int(row.get(f"{prefix}.branch_id"), default=0)
