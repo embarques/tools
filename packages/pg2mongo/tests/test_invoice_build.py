@@ -51,8 +51,48 @@ def test_build_invoice_doc_uses_api_shape():
     ]
     assert doc["sender"]["addresses"][0]["address1"] == "123 Main"
     assert "address" not in doc["sender"]
-    assert doc["receiver"]["customerType"] == 2
-    assert doc["receiver"]["phones"] == [
+    assert doc["receivers"][0]["customerType"] == 2
+    assert doc["receivers"][0]["phones"] == [
         {"type": "mobile", "number": "+13055552000", "isPrimary": True}
     ]
+    assert "receiver" not in doc
     assert doc["invoiceDetails"] == []
+
+
+def test_build_invoice_doc_normalizes_legacy_receiver_object():
+    doc = build_invoice_doc(
+        {
+            "number": "INV-1002",
+            "receiver": {
+                "id": "abc123",
+                "name": "Maria",
+                "customerType": 1,
+            },
+        }
+    )
+
+    assert doc["receivers"] == [
+        {
+            "_id": "abc123",
+            "name": "Maria",
+            "customerType": 2,
+        }
+    ]
+    assert "receiver" not in doc
+
+
+def test_build_invoice_doc_keeps_receivers_array():
+    doc = build_invoice_doc(
+        {
+            "number": "INV-1003",
+            "receivers": [
+                {"_id": "r1", "name": "Maria", "customerType": 2},
+                {"id": "r2", "name": "Jose"},
+            ],
+        }
+    )
+
+    assert doc["receivers"] == [
+        {"_id": "r1", "name": "Maria", "customerType": 2},
+        {"_id": "r2", "name": "Jose", "customerType": 2},
+    ]
