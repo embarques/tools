@@ -144,7 +144,8 @@ def all_cmd(
 
     Date-based entities (customer, container, invoice, pickup) use the same
     start/end date window as individual transfer commands. Deliveries map the
-    date range to start/end years.     Branch, employee, and user always run a full sync.
+    date range to start/end years. Branch and employee always run a full sync.
+    Users are insert-only (existing Mongo users are not updated or deleted).
     """
     verbose = resolve_verbose(ctx, verbose)
     failed: list[str] = []

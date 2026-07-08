@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from pymongo import UpdateOne
+
 from pg2mongo.builders.embedded import branch_dto
 from pg2mongo.utils import to_utc
 
@@ -47,3 +49,19 @@ def build_user_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     #     doc["registrationTempKey"] = temp_key
 
     return doc
+
+
+def user_insert_op(doc: Dict[str, Any]) -> UpdateOne:
+    """
+    Insert a user only when no document exists for this Postgres id.
+
+    Existing Mongo users (e.g. Firebase accounts created in the portal) are
+    left unchanged — no field updates and no deletes.
+    """
+    doc_id = doc["_id"]
+    fields = {key: value for key, value in doc.items() if key != "_id"}
+    return UpdateOne(
+        {"_id": doc_id},
+        {"$setOnInsert": fields},
+        upsert=True,
+    )

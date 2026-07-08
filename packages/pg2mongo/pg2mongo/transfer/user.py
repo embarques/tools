@@ -5,7 +5,7 @@ from typing import Optional
 import click
 from pymongo import UpdateOne
 
-from pg2mongo.builders.user_build import build_user_doc
+from pg2mongo.builders.user_build import build_user_doc, user_insert_op
 from pg2mongo import collections as cols
 from pg2mongo.clients import connect_postgres, connect_mongo
 from pg2mongo.cli.context import resolve_verbose, verbose_option
@@ -51,6 +51,9 @@ def user_cmd(
 ):
     """
     Transfer user records from Postgres → MongoDB (users collection).
+
+    Insert-only: adds users that are missing in Mongo by Postgres id. Existing
+    users are never updated or removed.
     """
     verbose = resolve_verbose(ctx, verbose)
     settings = resolve_settings_from_ctx(ctx, verbose=verbose)
@@ -96,7 +99,7 @@ def user_cmd(
         )
         progress.announce()
 
-        # 3) Build bulk upsert operations
+        # 3) Build insert-only operations (skip existing users)
         ops: list[UpdateOne] = []
         with progress:
             for row in rows:
@@ -110,29 +113,13 @@ def user_cmd(
                 if progress.enabled(4):
                     progress.secho(f"[user] doc={doc!r}", fg="white")
 
-                ops.append(
-                    UpdateOne(
-                        {"_id": doc["_id"]},
-                        {
-                            "$set": doc,
-                            "$unset": {
-                                "name": "",
-                                "password": "",
-                                "startTime": "",
-                                "endTime": "",
-                                "createdById": "",
-                                "accessCode": "",
-                                "type": "",
-                            },
-                        },
-                        upsert=True,
-                    )
-                )
+                ops.append(user_insert_op(doc))
 
         if dry_run:
             click.secho(
-                f"[DRY-RUN] would upsert {len(ops)} documents into "
-                f"{cols.qualified(settings.mongo.db, cols.USERS)}",
+                f"[DRY-RUN] would insert up to {len(ops)} new users into "
+                f"{cols.qualified(settings.mongo.db, cols.USERS)} "
+                f"(existing users unchanged)",
                 fg="yellow",
             )
             return
@@ -140,12 +127,14 @@ def user_cmd(
         # 4) Execute bulk_write
         result = coll.bulk_write(ops, ordered=False)
 
+        inserted = len(result.upserted_ids)
+        skipped = result.matched_count
+
         click.secho(
             (
-                f"[users] Upsert complete → "
-                f"matched={result.matched_count}, "
-                f"modified={result.modified_count}, "
-                f"upserted={len(result.upserted_ids)}"
+                f"[users] Insert complete → "
+                f"inserted={inserted}, "
+                f"skipped_existing={skipped}"
             ),
             fg="green",
         )

@@ -389,7 +389,7 @@ pg2mongo -c db.toml transfer container --start-date 2022-01-01 --limit 20 --dry-
 pg2mongo -c db.toml transfer container
 ```
 
-### Employees, users, branches (full sync)
+### Employees, branches (full sync); users (insert-only)
 
 ```bash
 pg2mongo -c db.toml transfer employee
@@ -397,6 +397,7 @@ pg2mongo -c db.toml transfer employee --limit 50 --dry-run
 
 pg2mongo -c db.toml transfer user
 pg2mongo -c db.toml transfer user --limit 25 --dry-run
+# Users: inserts missing Postgres users only; never updates or deletes existing Mongo users.
 
 pg2mongo -c db.toml transfer branch
 pg2mongo -c db.toml transfer branch --limit 5 --dry-run
