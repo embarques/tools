@@ -19,6 +19,7 @@ SELECT
     id,
     designation,
     COALESCE(booking_number, '')   AS booking_number,
+    COALESCE(seal_number, '')      AS seal_number,
     COALESCE(container_number, '') AS container_number,
     COALESCE(broker, '')           AS broker,
     COALESCE(trans_company, '')    AS trans_company,
@@ -215,7 +216,8 @@ def container_cmd(
         with progress:
             for row in rows:
                 doc = build_container_doc(row)
-                hint = f"id={doc.get('_id')} name={doc.get('name')}"
+                doc_id = doc.pop("_id")
+                hint = f"id={doc_id} name={doc.get('name')}"
                 if progress.enabled(2):
                     hint += f" containerNumber={doc.get('containerNumber', '')}"
                 progress.step(hint, emit=verbose)
@@ -225,7 +227,7 @@ def container_cmd(
 
                 ops.append(
                     UpdateOne(
-                        {"_id": doc["_id"]},
+                        {"_id": doc_id},
                         {"$set": doc, "$unset": {"number": ""}},
                         upsert=True,
                     )

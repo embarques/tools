@@ -10,17 +10,18 @@ def build_container_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     Map a Postgres container row into the MongoDB container document.
 
     Expected row keys (from SQL):
-      id, designation, booking_number, container_number, broker,
-      trans_company, cost, departure_date, arrival_date,
+      id, designation, booking_number, seal_number, container_number,
+      broker, trans_company, cost, departure_date, arrival_date,
       time_created, time_modified
     """
+    seal = row.get("seal_number") or row.get("seal") or ""
     return {
         "_id": row["id"],
         "name": row.get("designation") or "",
         "booking": row.get("booking_number") or "",
-        "seal": row.get("seal") or "",
+        "seal": seal,
         "containerNumber": row.get("container_number") or "",
-        "sealNumber": row.get("seal_number") or "",
+        "sealNumber": seal,
         "broker": row.get("broker") or "",
         "company": row.get("trans_company") or "",
         "cost": decimal_to_float(row.get("cost")) if row.get("cost") is not None else 0.0,
