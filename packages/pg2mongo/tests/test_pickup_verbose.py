@@ -12,7 +12,7 @@ def test_format_pickup_verbose_line():
             "phones": [
                 {"type": "mobile", "number": "+18095551234", "isPrimary": True}
             ],
-            "addresses": [{"city": "Santiago", "isPrimary": True}],
+            "address": {"city": "Santiago"},
         },
     }
     line = format_pickup_verbose(doc, action="new")

@@ -342,6 +342,8 @@ def _process_single_invoice(
                         "address": "",
                         "phone1": "",
                         "phone2": "",
+                        "sender.addresses": "",
+                        "receiver.addresses": "",
                     },
                 },
                 upsert=True,

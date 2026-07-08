@@ -24,15 +24,28 @@ def test_invoice_match_filter():
     assert invoice_match_filter({"number": "INV-1"}) == {"number": "INV-1"}
 
 
+def test_pickup_match_filter_legacy_addresses_fallback():
+    filt = pickup_match_filter(
+        {
+            "date": "2026-01-01",
+            "sender": {
+                "name": "Maria",
+                "addresses": [{"isPrimary": True, "address1": "456 Oak"}],
+            },
+        }
+    )
+    assert filt["sender.address.address1"] == "456 Oak"
+
+
 def test_pickup_match_filter():
     filt = pickup_match_filter(
         {
             "date": "2026-01-01",
             "sender": {
                 "name": "Maria",
-                "addresses": [{"isPrimary": True, "address1": "123 Main"}],
+                "address": {"address1": "123 Main"},
             },
         }
     )
     assert filt["sender.name"] == "Maria"
-    assert filt["sender.addresses.address1"] == "123 Main"
+    assert filt["sender.address.address1"] == "123 Main"

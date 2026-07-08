@@ -27,6 +27,7 @@ def test_build_invoice_doc_uses_api_shape():
             "sender.cus_type": 0,
             "sender.phone1": "305-555-1000",
             "sender.address.address1": "123 Main",
+            "sender.address.apt": "2B",
             "sender.address.city": "Miami",
             "sender.address.state": "FL",
             "sender.address.zipcode": "33101",
@@ -49,8 +50,11 @@ def test_build_invoice_doc_uses_api_shape():
     assert doc["sender"]["phones"] == [
         {"type": "business", "number": "+13055551000", "isPrimary": True}
     ]
-    assert doc["sender"]["addresses"][0]["address1"] == "123 Main"
-    assert "address" not in doc["sender"]
+    assert doc["sender"]["address"]["address1"] == "123 Main"
+    assert doc["sender"]["address"]["city"] == "Miami"
+    assert doc["sender"]["address"]["zipcode"] == "33101"
+    assert doc["sender"]["address"]["apartment"] == "2B"
+    assert "isPrimary" not in doc["sender"]["address"]
     assert doc["receiver"]["customerType"] == 2
     assert doc["receiver"]["phones"] == [
         {"type": "mobile", "number": "+13055552000", "isPrimary": True}

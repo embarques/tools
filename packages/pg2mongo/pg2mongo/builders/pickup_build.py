@@ -59,7 +59,7 @@ def build_pickup_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         secondary_phone_type="home",
     )
     if receiver:
-        doc["receiver"] = receiver
+        doc["receivers"] = [receiver]
 
     comment_text = row.get("comment") or ""
     if comment_text:
@@ -83,10 +83,14 @@ def format_pickup_date(value) -> str:
     return str(value)
 
 
-def _primary_address_city(addresses: list[dict]) -> str:
-    for entry in addresses:
+def _party_address_city(party: dict) -> str:
+    address = party.get("address") or {}
+    if address.get("city"):
+        return address["city"]
+    for entry in party.get("addresses") or []:
         if entry.get("isPrimary"):
             return entry.get("city") or ""
+    addresses = party.get("addresses") or []
     if addresses:
         return addresses[0].get("city") or ""
     return ""
@@ -98,7 +102,7 @@ def format_pickup_verbose(doc: dict, *, action: str) -> str:
     sender = doc.get("sender") or {}
     name = sender.get("name") or ""
     phone = primary_phone_number(sender.get("phones") or [])
-    city = _primary_address_city(sender.get("addresses") or [])
+    city = _party_address_city(sender)
     date_str = format_pickup_date(doc.get("date"))
     return (
         f"[pickup] {action} id={pickup_id} name={name} "

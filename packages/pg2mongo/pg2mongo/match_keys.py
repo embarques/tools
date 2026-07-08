@@ -25,21 +25,24 @@ def customer_match_filter(doc: dict[str, Any]) -> dict[str, Any]:
 def pickup_match_filter(doc: dict[str, Any]) -> dict[str, Any]:
     """Mongo filter to find a pickup without storing Postgres ``oldID``."""
     sender = doc.get("sender") or {}
-    addresses = sender.get("addresses") or []
-    address1 = ""
-    for entry in addresses:
-        if entry.get("isPrimary"):
-            address1 = entry.get("address1") or ""
-            break
-    if not address1 and addresses:
-        address1 = addresses[0].get("address1") or ""
+    address = sender.get("address") or {}
+    address1 = address.get("address1") or ""
+    if not address1:
+        for entry in sender.get("addresses") or []:
+            if entry.get("isPrimary"):
+                address1 = entry.get("address1") or ""
+                break
+        if not address1:
+            addresses = sender.get("addresses") or []
+            if addresses:
+                address1 = addresses[0].get("address1") or ""
 
     filt: dict[str, Any] = {
         "date": doc.get("date"),
         "sender.name": sender.get("name") or "",
     }
     if address1:
-        filt["sender.addresses.address1"] = address1
+        filt["sender.address.address1"] = address1
     return filt
 
 

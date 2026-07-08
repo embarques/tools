@@ -97,7 +97,7 @@ def init_indexes_cmd(ctx: click.Context, verbose: int):
         create_unique_index(
             db,
             cols.PICKUPS,
-            {"date": 1, "sender.name": 1, "sender.addresses.address1": 1},
+            {"date": 1, "sender.name": 1, "sender.address.address1": 1},
         )
 
         click.secho("✅ Mongo index initialization complete.", fg="green")

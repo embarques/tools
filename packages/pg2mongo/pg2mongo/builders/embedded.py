@@ -3,9 +3,8 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from pg2mongo.builders.contacts import (
-    customer_addresses_from_legacy,
+    normalize_address_fields,
     phones_from_legacy,
-    primary_phone_number,
 )
 from pg2mongo.customer_types import mongo_customer_type
 
@@ -98,7 +97,7 @@ def customer_snapshot(
     primary_phone_type: str = "mobile",
     secondary_phone_type: str = "home",
 ) -> dict[str, Any] | None:
-    """Embedded customer snapshot (pickups, invoices) in API shape."""
+    """Embedded customer party snapshot for pickups and invoices."""
     party_id = safe_int(row.get(f"{prefix}.id"), default=-1)
     if party_id <= 0:
         return None
@@ -116,21 +115,21 @@ def customer_snapshot(
         primary_type=primary_phone_type,
         secondary_type=secondary_phone_type,
     )
-    legacy_address = address_from_row(row, prefix=f"{prefix}.address.")
-    addresses = customer_addresses_from_legacy(
-        legacy_address,
-        primary_phone=primary_phone_number(phones),
+    address = normalize_address_fields(
+        address_from_row(row, prefix=f"{prefix}.address.")
     )
 
     doc: dict[str, Any] = {
         "name": row.get(f"{prefix}.name") or "",
         "customerType": customer_type,
         "phones": phones,
-        "addresses": addresses,
         "email": row.get(f"{prefix}.email") or "",
         "IDNumber": row.get(f"{prefix}.id_number") or "",
         "active": True,
     }
+
+    if any(address.values()):
+        doc["address"] = address
 
     branch_id = safe_int(row.get(f"{prefix}.branch_id"), default=0)
     if branch_id > 0:
