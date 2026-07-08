@@ -338,7 +338,7 @@ def _process_single_invoice(
                         "oldID": "",
                         "driver": "",
                         "invoice_details": "",
-                        "receiver": "",
+                        "receivers": "",
                         "address": "",
                         "phone1": "",
                         "phone2": "",

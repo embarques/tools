@@ -13,35 +13,6 @@ from pg2mongo.customer_types import RECEIVER, SENDER
 from pg2mongo.utils import to_utc, decimal_to_float
 
 
-def _normalize_receivers(row: Dict[str, Any], fallback_receiver: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Normalize legacy ``receiver`` into final ``receivers[]``."""
-    receivers = row.get("receivers")
-    if isinstance(receivers, list):
-        normalized: list[dict[str, Any]] = []
-        for receiver in receivers:
-            if not isinstance(receiver, dict):
-                continue
-            item = dict(receiver)
-            if "_id" not in item and item.get("id") not in (None, ""):
-                item["_id"] = item.pop("id")
-            item["customerType"] = RECEIVER
-            normalized.append(item)
-        return normalized
-
-    legacy_receiver = row.get("receiver")
-    if isinstance(legacy_receiver, dict):
-        item = dict(legacy_receiver)
-        if "_id" not in item and item.get("id") not in (None, ""):
-            item["_id"] = item.pop("id")
-        item["customerType"] = RECEIVER
-        return [item]
-
-    if fallback_receiver:
-        return [fallback_receiver]
-
-    return []
-
-
 def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     """Build a Mongo invoice document from a vwinvoice_api row."""
     doc: Dict[str, Any] = {
@@ -97,6 +68,7 @@ def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         primary_phone_type="mobile",
         secondary_phone_type="home",
     )
-    doc["receivers"] = _normalize_receivers(row, receiver)
+    if receiver:
+        doc["receiver"] = receiver
 
     return doc
