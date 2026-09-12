@@ -38,14 +38,14 @@ def test_build_invoice_doc_uses_api_shape():
         }
     )
 
-    assert doc["branch"] == {"id": 1, "code": "NYC"}
-    assert doc["container"] == {"id": 2, "name": "Container A"}
-    assert doc["user"] == {"id": 9, "userName": "tasador1", "fullName": "tasador1"}
-    assert doc["employee"] == {
-        "id": 5,
-        "name": "Tasador",
-        "fullName": "Tasador",
-    }
+    assert doc["branch"] == {"_id": 1, "code": "NYC"}
+    assert doc["container"] == {"_id": 2, "name": "Container A"}
+    assert doc["createdBy"] == {"_id": 9, "name": "tasador1"}
+    assert doc["employee"] == {"_id": 5, "name": "Tasador"}
+    assert "user" not in doc
+    assert "userName" not in doc["employee"]
+    assert "fullName" not in doc["employee"]
+    assert doc["registration"] == "COMPLETED"
     assert doc["sender"]["customerType"] == 1
     assert doc["sender"]["phones"] == [
         {"type": "business", "number": "+13055551000", "isPrimary": True}
@@ -55,6 +55,8 @@ def test_build_invoice_doc_uses_api_shape():
     assert doc["sender"]["address"]["zipcode"] == "33101"
     assert doc["sender"]["address"]["apartment"] == "2B"
     assert "isPrimary" not in doc["sender"]["address"]
+    assert "active" not in doc["sender"]
+    assert "branch" not in doc["sender"]
     assert doc["receiver"]["customerType"] == 2
     assert doc["receiver"]["phones"] == [
         {"type": "mobile", "number": "+13055552000", "isPrimary": True}

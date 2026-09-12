@@ -242,7 +242,11 @@ def _flush_pickup_batch(
                     "$unset": {
                         "oldID": "",
                         "user": "",
+                        "employee": "",
+                        "sector": "",
                         "receiver": "",
+                        "helper1": "",
+                        "helper2": "",
                     },
                 },
                 upsert=True,

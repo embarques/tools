@@ -63,14 +63,14 @@ def init_indexes_cmd(ctx: click.Context, verbose: int):
             {
                 "transactionId": 1,
                 "refNumber": 1,
-                "incomeStatement.id": 1,
-                "invoice.id": 1,
-                "accounts.id": 1,
+                "incomeStatement._id": 1,
+                "invoice._id": 1,
+                "accounts._id": 1,
             },
         )
 
         # Users
-        create_unique_index(db, cols.USERS, {"userName": 1, "roles": 1})
+        create_unique_index(db, cols.USERS, {"uid": 1})
 
         # Containers
         create_unique_index(db, cols.CONTAINERS, {"name": 1})

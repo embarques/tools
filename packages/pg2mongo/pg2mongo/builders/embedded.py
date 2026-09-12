@@ -24,7 +24,8 @@ def branch_dto(
     name: str = "",
     code: str = "",
 ) -> dict[str, Any]:
-    ref: dict[str, Any] = {"id": safe_int(branch_id)}
+    """core.BranchDTO — bson ``_id``, ``name``, ``code``."""
+    ref: dict[str, Any] = {"_id": safe_int(branch_id)}
     if name:
         ref["name"] = name
     if code:
@@ -33,7 +34,7 @@ def branch_dto(
 
 
 def address_from_row(row: Mapping[str, Any], prefix: str = "address.") -> dict[str, Any]:
-    """Build a singular embedded address (employees, branches — not customers)."""
+    """Build a singular embedded address (employees, branches, party snapshots)."""
     apt_key = f"{prefix}apt" if f"{prefix}apt" in row else f"{prefix}apartment"
     return {
         "address1": row.get(f"{prefix}address1") or "",
@@ -46,33 +47,48 @@ def address_from_row(row: Mapping[str, Any], prefix: str = "address.") -> dict[s
     }
 
 
+def user_dto(
+    user_id: Any,
+    *,
+    name: str = "",
+) -> dict[str, Any]:
+    """core.UserDTO — bson ``_id``, ``name``."""
+    ref: dict[str, Any] = {"_id": safe_int(user_id)}
+    if name:
+        ref["name"] = name
+    return ref
+
+
 def user_snapshot(
     user_id: Any,
     *,
     name: str = "",
-    userName: str = "",
-    fullName: str = "",
     email: str = "",
 ) -> dict[str, Any]:
-    ref: dict[str, Any] = {"id": safe_int(user_id)}
+    """
+    Lightweight ``core.User`` embed used on invoice employee / audit fields.
+
+    Persists ``_id`` + ``name`` (and optional ``email``). Does not write
+    ``userName`` / ``fullName`` / ``password``.
+    """
+    ref: dict[str, Any] = {"_id": safe_int(user_id)}
     if name:
         ref["name"] = name
-    if userName:
-        ref["userName"] = userName
-    if fullName:
-        ref["fullName"] = fullName
-    elif name:
-        ref["fullName"] = name
     if email:
         ref["email"] = email
     return ref
 
 
-def employee_snapshot(employee_id: Any, *, name: str = "") -> dict[str, Any]:
+def employee_dto(employee_id: Any, *, name: str = "") -> dict[str, Any]:
+    """employee.EmployeeDTO — bson ``id`` (not ``_id``), ``name``."""
     ref: dict[str, Any] = {"id": safe_int(employee_id)}
     if name:
         ref["name"] = name
     return ref
+
+
+# Back-compat alias used by older call sites / delivery helpers.
+employee_snapshot = employee_dto
 
 
 def container_snapshot(
@@ -81,11 +97,24 @@ def container_snapshot(
     name: str = "",
     container_number: str = "",
 ) -> dict[str, Any]:
-    ref: dict[str, Any] = {"id": safe_int(container_id)}
+    """core.Container embed — bson ``_id``, ``name``, ``containerNumber``."""
+    ref: dict[str, Any] = {"_id": safe_int(container_id)}
     if name:
         ref["name"] = name
     if container_number:
         ref["containerNumber"] = container_number
+    return ref
+
+
+def delivery_snapshot(
+    delivery_id: Any,
+    *,
+    name: str = "",
+) -> dict[str, Any]:
+    """core.Delivery embed — bson ``_id``, ``name``."""
+    ref: dict[str, Any] = {"_id": safe_int(delivery_id)}
+    if name:
+        ref["name"] = name
     return ref
 
 
@@ -97,7 +126,12 @@ def customer_snapshot(
     primary_phone_type: str = "mobile",
     secondary_phone_type: str = "home",
 ) -> dict[str, Any] | None:
-    """Embedded customer party snapshot for pickups and invoices."""
+    """
+    core.CustomerParty snapshot for pickups/invoices.
+
+    Writes singular ``address`` only. Omits party ``_id`` (ObjectId is resolved
+    by the API when known; numeric Postgres ids must not be stored as ``_id``).
+    """
     party_id = safe_int(row.get(f"{prefix}.id"), default=-1)
     if party_id <= 0:
         return None
@@ -125,14 +159,9 @@ def customer_snapshot(
         "phones": phones,
         "email": row.get(f"{prefix}.email") or "",
         "IDNumber": row.get(f"{prefix}.id_number") or "",
-        "active": True,
     }
 
     if any(address.values()):
         doc["address"] = address
-
-    branch_id = safe_int(row.get(f"{prefix}.branch_id"), default=0)
-    if branch_id > 0:
-        doc["branch"] = branch_dto(branch_id)
 
     return doc

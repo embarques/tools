@@ -99,7 +99,7 @@ def _resolve_customer_ref(
     if not customer:
         return None
 
-    ref: Dict[str, Any] = {"id": customer["_id"]}
+    ref: Dict[str, Any] = {"_id": customer["_id"]}
     if customer.get("name"):
         ref["name"] = customer["name"]
     return ref
@@ -129,7 +129,7 @@ def upsert_invoice_journals(
     written = 0
 
     invoice_ref: Dict[str, Any] = {
-        "id": invoice_id,
+        "_id": invoice_id,
         "number": invoice_number,
         "cost": invoice_cost,
         "payment": invoice_payment,
@@ -156,20 +156,25 @@ def upsert_invoice_journals(
             if customer_ref:
                 doc["customer"] = customer_ref
 
-        account_id = (doc.get("accounts") or [{}])[0].get("id")
+        account = (doc.get("accounts") or [{}])[0]
+        account_id = account.get("_id", account.get("id"))
+        income_stmt = doc.get("incomeStatement") or {}
         upsert_filter = {
             "transactionId": doc.get("transactionId"),
             "refNumber": doc.get("refNumber"),
-            "incomeStatement.id": doc.get("incomeStatement", {}).get("id"),
-            "invoice.id": invoice_id,
-            "accounts.id": account_id,
+            "incomeStatement._id": income_stmt.get("_id", income_stmt.get("id")),
+            "invoice._id": invoice_id,
+            "accounts._id": account_id,
         }
 
         coll.update_one(
             upsert_filter,
             {
                 "$set": doc,
-                "$unset": {"oldID": ""},
+                "$unset": {
+                    "oldID": "",
+                    "user": "",
+                },
             },
             upsert=True,
             session=session,

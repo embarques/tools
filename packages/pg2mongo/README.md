@@ -21,12 +21,12 @@ clean, incremental, and developer-friendly way.
 
 ## Naming conventions
 
-pg2mongo follows the legacy **Go / MongoDB app** naming split:
+pg2mongo follows the **emsys-api** Go / MongoDB naming split:
 
 | Layer | Style | Examples |
 |-------|--------|----------|
 | **Collection names** | lowercase; multi-word uses **snake_case** | `invoices`, `invoice_details`, `income_statements` |
-| **Field names inside documents** | **camelCase** (from Go `bson` tags) | `oldID`, `createdAt`, `customerType`, `userName`, `invoiceDetails` |
+| **Field names inside documents** | **camelCase** (from Go `bson` tags) | `createdAt`, `customerType`, `invoiceDetails`, `IDNumber` |
 
 Constants live in `pg2mongo/collections.py`. Collection names and document field names are **not** the same thing — e.g. line items live in the `invoice_details` collection but an invoice document references them via the `invoiceDetails` field.
 
@@ -46,17 +46,19 @@ Match the Go models’ `bson:"..."` tags so the API and existing Mongo data stay
 
 | Field | Notes |
 |-------|--------|
-| `oldID` | Postgres primary key stored on migrated docs |
 | `createdAt`, `updatedAt` | timestamps |
-| `customerType` | sender/receiver type |
-| `userName`, `fullName` | user fields |
-| `invoiceDetails` | array of refs on invoice docs (not `invoice_details`) |
+| `customerType` | sender=1 / receiver=2 |
+| `name` | users use `name` (not `userName` / `fullName`) |
+| `invoiceDetails` | array of `{_id}` refs on invoice docs |
 | `incomeStatement`, `paymentMethod`, `refNumber` | journal / accounting |
-| `summaryTotal`, `otherIncomes`, `accountReceivables` | income statement |
+| `summaryTotal` | income statement totals; bson keys include `checks`, `creditCard`, `income`, `general`, `cashNet` |
 
-Nested refs often use `_id` (Mongo) or `id` depending on the Go struct — follow the builder for each entity rather than inventing new keys.
+Nested refs follow each Go type’s bson tags carefully:
+- `core.BranchDTO` / `core.UserDTO` / container embeds → **`_id`**
+- `employee.EmployeeDTO` (e.g. delivery `employees[]`) → **`id`**
+- Transaction parties (`sender` / `receiver`) use singular **`address`**, not `addresses[]`
 
-When adding a field, check the corresponding Go `bson` tag in the emsys API models; do **not** use snake_case for document properties.
+When adding a field, check the corresponding Go `bson` tag in the emsys API models; do **not** use snake_case for document properties (exception: address verification uses `is_verified` / `verified_at`).
 
 ---
 

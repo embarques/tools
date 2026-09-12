@@ -4,7 +4,6 @@ from typing import Any, Dict
 
 from pymongo import UpdateOne
 
-from pg2mongo.builders.embedded import branch_dto
 from pg2mongo.utils import to_utc
 
 
@@ -12,41 +11,34 @@ def build_user_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     """
     Map a Postgres auth_user + user_profile row into the MongoDB user document.
 
-    Expected row keys from SQL:
-      id, username, full_name, time_created,
-      register_key, temp_key, branch_id
+    Matches ``internal/user.User`` bson tags:
+      _id, uid, email, name, active, branch{_id,name}, role{_id,name},
+      startTime, endTime, createdAt, updatedAt
+
+    Does not write userName, fullName, or password.
     """
     branch = None
     branch_id = row.get("branch_id") or 0
     if branch_id:
-        branch = branch_dto(
-            branch_id,
-            name=row.get("branch_name") or "",
-            code=row.get("branch_code") or "",
-        )
+        # User.BranchRef is {_id, name} — omit code.
+        branch = {"_id": int(branch_id)}
+        branch_name = row.get("branch_name") or ""
+        if branch_name:
+            branch["name"] = branch_name
+
+    name = (row.get("full_name") or row.get("username") or "").strip()
 
     doc: Dict[str, Any] = {
         "_id": row["id"],
         "uid": row.get("uid") or "",
         "email": row.get("email") or "",
-        "userName": row.get("username") or "",
-        "fullName": row.get("full_name") or "",
+        "name": name,
         "active": bool(row.get("is_active", True)),
-        "branch": branch,
-        "role": None,
         "createdAt": to_utc(row.get("time_created")),
         "updatedAt": to_utc(row.get("time_created")),
     }
-
-    # If later you uncomment RegistrationKey fields in the Go model,
-    # you can also add:
-    #
-    # reg_key = row.get("register_key") or ""
-    # temp_key = row.get("temp_key") or ""
-    # if reg_key:
-    #     doc["registrationKey"] = reg_key
-    # if temp_key:
-    #     doc["registrationTempKey"] = temp_key
+    if branch:
+        doc["branch"] = branch
 
     return doc
 

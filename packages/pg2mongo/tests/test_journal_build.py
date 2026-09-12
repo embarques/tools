@@ -30,7 +30,10 @@ def test_build_journal_doc_maps_account_chart_and_amounts():
     doc = build_journal_doc(row)
 
     assert doc["_pgJournalId"] == 99
-    assert doc["accounts"][0]["id"] == 1
-    assert doc["incomeStatement"] == {"id": 10}
+    assert doc["accounts"][0]["_id"] == 1
+    assert doc["incomeStatement"] == {"_id": 10}
+    assert doc["paymentMethod"] == {"_id": 2, "name": "CASH"}
+    assert doc["createdBy"] == {"_id": 3}
+    assert "user" not in doc
     assert doc["transactionId"] == 7
     assert doc["_pgCustomerId"] == 42

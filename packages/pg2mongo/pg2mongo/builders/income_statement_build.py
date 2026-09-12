@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from pg2mongo.builders.embedded import branch_dto, container_snapshot, employee_snapshot, user_snapshot
+from pg2mongo.builders.embedded import (
+    branch_dto,
+    container_snapshot,
+    delivery_snapshot,
+    user_snapshot,
+)
 from pg2mongo.utils import decimal_to_float, to_utc
 
 
 def _zero_summary_defaults() -> Dict[str, float]:
+    """IncomeStatement Total bson keys (json names differ for some fields)."""
     return {
         "invoices": 0.0,
         "receipts": 0.0,
@@ -15,24 +21,31 @@ def _zero_summary_defaults() -> Dict[str, float]:
         "otherIncomes": 0.0,
         "cash": 0.0,
         "deposits": 0.0,
-        "check": 0.0,
+        "checks": 0.0,
         "zelle": 0.0,
-        "creditCards": 0.0,
+        "creditCard": 0.0,
         "expenses": 0.0,
         "accountReceivables": 0.0,
         "discounts": 0.0,
         "accountsTransfer": 0.0,
         "loans": 0.0,
-        "totalIncome": 0.0,
-        "totalGeneral": 0.0,
-        "totalCash": 0.0,
+        "income": 0.0,
+        "general": 0.0,
+        "cashNet": 0.0,
         "netIncome": 0.0,
     }
 
 
+def _normalize_status(raw: Any) -> str:
+    value = str(raw or "").strip().lower()
+    if value in {"open", "closing", "closed"}:
+        return value
+    return value
+
+
 def build_income_statement_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Map a Postgres ``income_statement`` row (with optional joins) to MongoDB.
+    Map a Postgres ``income_statement`` row to MongoDB.
 
     Mongo ``_id`` is the Postgres ``income_statement.id`` (uint32).
     """
@@ -60,32 +73,31 @@ def build_income_statement_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         ),
         "rate": decimal_to_float(row.get("rate")),
         "currency": row.get("currency") or "",
-        "status": row.get("state") or "",
+        "status": _normalize_status(row.get("state")),
         "summaryTotal": summary,
         "createdAt": to_utc(row.get("time_created")),
         "updatedAt": to_utc(row.get("time_modified")),
     }
 
-    user = user_snapshot(
+    created_by = user_snapshot(
         row.get("supervisor_id"),
         name=row.get("supervisor_name") or "",
-        fullName=row.get("supervisor_name") or "",
     )
-    if user.get("id", 0) > 0:
-        doc["user"] = user
+    if created_by.get("_id", 0) > 0:
+        doc["createdBy"] = created_by
 
     container = container_snapshot(
         row.get("container_id"),
         name=row.get("container_designation") or "",
     )
-    if container.get("id", 0) > 0:
+    if container.get("_id", 0) > 0:
         doc["container"] = container
 
     delivery_id = int(row.get("delivery_id") or 0)
     if delivery_id > 0:
-        doc["delivery"] = {
-            "id": delivery_id,
-            "name": row.get("delivery_number") or "",
-        }
+        doc["delivery"] = delivery_snapshot(
+            delivery_id,
+            name=row.get("delivery_number") or "",
+        )
 
     return doc

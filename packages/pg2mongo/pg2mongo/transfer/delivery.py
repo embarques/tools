@@ -134,11 +134,16 @@ def delivery_cmd(
         with progress:
             for row in rows:
                 doc = build_delivery_doc(row)
-                hint = f"id={doc.get('_id')} name={doc.get('name')}"
+                doc_id = doc["_id"]
+                set_doc = {k: v for k, v in doc.items() if k != "_id"}
+                hint = f"id={doc_id} name={doc.get('name')}"
                 if progress.enabled(2):
-                    employee = doc.get("employee") or {}
+                    employees = doc.get("employees") or []
+                    employee_names = ", ".join(
+                        e.get("name", "") for e in employees if e.get("name")
+                    )
                     container = doc.get("container") or {}
-                    hint += f" employee={employee.get('name', '')} container={container.get('name', '')}"
+                    hint += f" employees=[{employee_names}] container={container.get('name', '')}"
                 progress.step(hint, emit=verbose)
 
                 if progress.enabled(4):
@@ -146,8 +151,15 @@ def delivery_cmd(
 
                 ops.append(
                     UpdateOne(
-                        {"_id": doc["_id"]},
-                        {"$set": doc},
+                        {"_id": doc_id},
+                        {
+                            "$set": set_doc,
+                            "$unset": {
+                                "employee": "",
+                                "helper1": "",
+                                "helper2": "",
+                            },
+                        },
                         upsert=True,
                     )
                 )

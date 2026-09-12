@@ -40,12 +40,19 @@ def test_build_pickup_doc_uses_transaction_address_snapshots():
         }
     )
 
+    assert doc["branch"] == {"_id": 1, "code": "NYC"}
+    assert "user" not in doc
+    assert "employee" not in doc
+    assert "sector" not in doc
+    assert doc["completed"] is False
+
     sender = doc["sender"]
     assert sender["address"]["address1"] == "2490 Davidson Ave"
     assert sender["address"]["apartment"] == "2B"
     assert sender["address"]["city"] == "Bronx"
     assert "addresses" not in sender
     assert "isPrimary" not in sender["address"]
+    assert "active" not in sender
 
     receivers = doc["receivers"]
     assert len(receivers) == 1

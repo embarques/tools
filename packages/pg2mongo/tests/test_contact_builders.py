@@ -30,7 +30,7 @@ def test_build_customer_doc_uses_api_shape():
     ]
     assert doc["email"] == ""
     assert doc["IDNumber"] == "123456789"
-    assert doc["branch"] == {"id": 1, "code": "NYC", "name": "New York"}
+    assert doc["branch"] == {"_id": 1, "code": "NYC", "name": "New York"}
     assert doc["addresses"][0]["address1"] == "123 Main St"
     assert doc["addresses"][0]["isPrimary"] is True
     assert doc["addresses"][0]["phone"] == "+12015550100"
@@ -62,6 +62,6 @@ def test_build_employee_doc_uses_api_shape():
     assert doc["phones"] == [
         {"type": "mobile", "number": "+12125552000", "isPrimary": True}
     ]
-    assert doc["branch"] == {"id": 1, "code": "NYC"}
+    assert doc["branch"] == {"_id": 1, "code": "NYC"}
     assert doc["address"]["address1"] == "100 Worker Ln"
     assert "phone1" not in doc

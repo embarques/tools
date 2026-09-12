@@ -13,8 +13,15 @@ from pg2mongo.customer_types import RECEIVER, SENDER
 from pg2mongo.utils import to_utc, decimal_to_float
 
 
+def _normalize_registration(raw: Any) -> str:
+    value = str(raw or "").strip().upper()
+    if value in {"PENDING", "COMPLETED"}:
+        return value
+    return value
+
+
 def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Build a Mongo invoice document from a vwinvoice_api row."""
+    """Build a Mongo invoice document matching ``internal/invoice.Invoice``."""
     doc: Dict[str, Any] = {
         "number": row.get("number") or "",
         "createdAt": to_utc(row.get("time_created")),
@@ -22,7 +29,7 @@ def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         "date": to_utc(row.get("invoice_date")),
         "isVoid": bool(row.get("is_void", False)),
         "isArchive": bool(row.get("is_archive", False)),
-        "registration": row.get("registration") or "",
+        "registration": _normalize_registration(row.get("registration")),
         "paidRegion": row.get("paid_region") or "",
         "paidStatus": row.get("paid_status") or "",
         "branch": branch_dto(
@@ -30,15 +37,9 @@ def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
             code=row.get("branch_code") or "",
         ),
         "cost": decimal_to_float(row.get("cost")),
-        "user": user_snapshot(
-            row.get("user_id"),
-            userName=row.get("user.name") or "",
-            fullName=row.get("user.name") or "",
-        ),
         "employee": user_snapshot(
             row.get("driver_id"),
             name=row.get("driver.name") or "",
-            fullName=row.get("driver.name") or "",
         ),
         "container": container_snapshot(
             row.get("container_id"),
@@ -50,6 +51,14 @@ def build_invoice_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         "surcharge": decimal_to_float(row.get("recharge") or 0),
         cols.INVOICE_DETAILS_FIELD: [],
     }
+
+    # Optional createdBy from Postgres user (portal user who registered the invoice).
+    created_by = user_snapshot(
+        row.get("user_id"),
+        name=row.get("user.name") or "",
+    )
+    if created_by.get("_id", 0) > 0:
+        doc["createdBy"] = created_by
 
     sender = customer_snapshot(
         row,

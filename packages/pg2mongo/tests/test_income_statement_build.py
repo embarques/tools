@@ -32,5 +32,15 @@ def test_build_income_statement_doc():
     doc = build_income_statement_doc(row)
 
     assert doc["_id"] == 42
-    assert doc["branch"]["id"] == 1
-    assert doc["user"]["id"] == 5
+    assert doc["branch"]["_id"] == 1
+    assert doc["createdBy"]["_id"] == 5
+    assert "user" not in doc
+    assert doc["status"] == "closed"
+    assert "checks" in doc["summaryTotal"]
+    assert "creditCard" in doc["summaryTotal"]
+    assert "income" in doc["summaryTotal"]
+    assert "general" in doc["summaryTotal"]
+    assert "cashNet" in doc["summaryTotal"]
+    assert "check" not in doc["summaryTotal"]
+    assert "creditCards" not in doc["summaryTotal"]
+    assert "totalIncome" not in doc["summaryTotal"]

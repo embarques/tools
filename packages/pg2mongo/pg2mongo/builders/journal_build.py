@@ -6,10 +6,10 @@ from pg2mongo.utils import decimal_to_float, to_utc
 
 # Postgres account_chart_id → Mongo accounts[0] (legacy app IDs from Go importer)
 _ACCOUNT_CHART_MONGO: dict[int, dict[str, Any]] = {
-    1: {"id": 1, "name": "CASH ON HAND", "type": "ASSET"},
-    2: {"id": 3, "name": "ACCOUNTS RECEIVABLE", "type": "ASSET"},
-    6: {"id": 5, "name": "SALES", "type": "REVENUE"},
-    18: {"id": 4, "name": "SALES DISCOUNTS", "type": "CONTRA-REVENUE"},
+    1: {"_id": 1, "name": "CASH ON HAND", "type": "ASSET"},
+    2: {"_id": 3, "name": "ACCOUNTS RECEIVABLE", "type": "ASSET"},
+    6: {"_id": 5, "name": "SALES", "type": "REVENUE"},
+    18: {"_id": 4, "name": "SALES DISCOUNTS", "type": "CONTRA-REVENUE"},
 }
 
 
@@ -23,7 +23,7 @@ def _build_account(row: Dict[str, Any]) -> Dict[str, Any]:
         account = dict(base)
     else:
         account = {
-            "id": chart_id,
+            "_id": chart_id,
             "name": row.get("account_chart_name") or row.get("account_chart_description") or "",
             "type": (row.get("account_type") or "").upper().replace(" ", "-"),
         }
@@ -46,11 +46,14 @@ def build_journal_doc(row: Dict[str, Any]) -> Dict[str, Any]:
     """
     Map a ``vwgeneral_journal`` row into a journal document.
 
-    ``invoice.id`` and ``customer.id`` are set later when the parent invoice is written.
+    Nested refs use bson ``_id`` (PaymentMethod, IncomeStatementDTO, Account).
+    ``invoice`` / ``customer`` ObjectIds are attached later when the parent
+    invoice is written.
     """
     payment_type = row.get("payment_method_payment_type") or "CASH"
     payment_method_id = int(row.get("payment_method_id") or 0)
     income_statement_id = int(row.get("income_statement_id") or 0)
+    created_by_id = int(row.get("created_by_id") or 0)
 
     doc: Dict[str, Any] = {
         "description": row.get("trans_description") or "",
@@ -58,19 +61,21 @@ def build_journal_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         "createdAt": to_utc(row.get("time_created")),
         "updatedAt": to_utc(row.get("time_modified")),
         "transactionId": int(row.get("transaction_id") or 0),
-        "user": {"id": int(row.get("created_by_id") or 0)},
         "refNumber": row.get("ref_number") or "",
         "paymentMethod": {
-            "id": payment_method_id,
+            "_id": payment_method_id,
             "name": payment_type,
         },
-        "incomeStatement": {"id": income_statement_id},
+        "incomeStatement": {"_id": income_statement_id},
         "transactionBalance": decimal_to_float(row.get("open_balance_temp")),
         "transactionAmount": _transaction_amount(row),
         "transactionType": row.get("transaction_type_description") or "",
         "accounts": [_build_account(row)],
         "_pgJournalId": int(row["id"]),
     }
+
+    if created_by_id > 0:
+        doc["createdBy"] = {"_id": created_by_id}
 
     customer_id = int(row.get("customer_id") or 0)
     if customer_id > 0:

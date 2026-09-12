@@ -119,7 +119,10 @@ def upsert_income_statements(
         ops.append(
             UpdateOne(
                 {"_id": doc["_id"]},
-                {"$set": doc},
+                {
+                    "$set": {k: v for k, v in doc.items() if k != "_id"},
+                    "$unset": {"user": ""},
+                },
                 upsert=True,
             )
         )
