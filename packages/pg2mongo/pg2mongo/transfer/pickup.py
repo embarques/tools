@@ -234,11 +234,14 @@ def _flush_pickup_batch(
         doc["updatedAt"] = datetime.now(timezone.utc)
         pending.append(doc)
 
+        doc_id = doc["_id"]
+        set_doc = {k: v for k, v in doc.items() if k != "_id"}
         requests.append(
             UpdateOne(
                 match,
                 {
-                    "$set": doc,
+                    "$set": set_doc,
+                    "$setOnInsert": {"_id": doc_id},
                     "$unset": {
                         "oldID": "",
                         "user": "",
