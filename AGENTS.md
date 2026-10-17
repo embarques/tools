@@ -259,3 +259,14 @@ Mongo collection object shapes.
   }
 }
 ```
+
+## Cursor Cloud specific instructions
+
+`pg2mongo` is a Python ≥3.10 Postgres→MongoDB import tool under `packages/pg2mongo`. The startup update script maintains a venv at `packages/pg2mongo/.venv` and runs `pip install -e .` there.
+
+### Running tests
+* Run unit tests with `python -m pytest tests/` from `packages/pg2mongo` (after activating the venv). Do **not** run a bare `pytest` from the package root — it auto-collects `pg2mongo/actions/test_connection.py` (an action implementation, not a test) and fails with a circular-import error. `pytest` is not declared in `pyproject.toml`; install it into the venv if missing.
+* Two config tests require a `db.toml` in `packages/pg2mongo` (gitignored; copy from `db.example.toml`). A `db.toml` is present in this env pointing Mongo at the local `rs0` replica set (`db = emsys_dev`).
+
+### Runtime caveat
+* Actual transfers (`pg2mongo transfer ...`, `test-connection`) need both a source PostgreSQL and a target MongoDB. Only local MongoDB (`rs0`) is available here; there is no Postgres, so `transfer`/`test-connection` against Postgres will fail until one is provided.
